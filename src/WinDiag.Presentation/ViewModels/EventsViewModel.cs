@@ -72,11 +72,15 @@ public sealed partial class EventsViewModel : PageViewModel
 
     partial void OnSelectedRangeChanged(Option<int> value) => OnPropertyChanged(nameof(IsCustomRange));
 
+    private Task _detailLoad = Task.CompletedTask;
+    private long _detailVersion;
+    private long? _detailId;
+
     partial void OnSelectedEventChanged(EventRow? value)
     {
         if (value is not null)
         {
-            _ = LoadDetailAsync(value.Id);
+            _detailLoad = LoadDetailAsync(value.Id);
         }
     }
 
@@ -118,8 +122,13 @@ public sealed partial class EventsViewModel : PageViewModel
             Events.Insert(0, row);
         }
 
-        SelectedEvent = Events.First(r => r.Id == id);
-        await LoadDetailAsync(id);
+        SelectedEvent = Events.First(r => r.Id == id); // a changed selection starts the detail load
+        if (_detailId != id)
+        {
+            _detailLoad = LoadDetailAsync(id);
+        }
+
+        await _detailLoad;
     }
 
     [RelayCommand]
@@ -293,6 +302,8 @@ public sealed partial class EventsViewModel : PageViewModel
 
     private async Task LoadDetailAsync(long id)
     {
+        var version = ++_detailVersion;
+        _detailId = id;
         var store = Context.Store;
         var (e, groupRows, note) = await Task.Run(() =>
         {
@@ -301,6 +312,11 @@ public sealed partial class EventsViewModel : PageViewModel
             var n = ev is null ? null : store.GetNote(NoteTargets.Group, ev.GroupKey);
             return (ev, groups, n);
         });
+        if (version != _detailVersion)
+        {
+            return; // a newer selection is loading: an older event's detail must not replace it
+        }
+
         if (e is null)
         {
             HasDetail = false;
