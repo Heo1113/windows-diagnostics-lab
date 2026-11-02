@@ -16,7 +16,6 @@ namespace WinDiag.Presentation.ViewModels;
 public sealed partial class TimelineViewModel : PageViewModel
 {
     private IReadOnlyList<TimelineItem> _items = [];
-    private bool _loadedOnce;
     private DateTimeOffset? _around;
 
     public TimelineViewModel(ViewContext context) : base(context)
@@ -61,9 +60,11 @@ public sealed partial class TimelineViewModel : PageViewModel
 
     public override async Task OnActivatedAsync()
     {
-        if (!_loadedOnce || _around is not null)
+        // The first load shows the day around a navigation target if one was set before it started.
+        var loadedBefore = HasStartedFirstLoad;
+        await LoadOnce(RefreshAsync);
+        if (loadedBefore && _around is not null)
         {
-            _loadedOnce = true;
             await RefreshAsync();
         }
     }

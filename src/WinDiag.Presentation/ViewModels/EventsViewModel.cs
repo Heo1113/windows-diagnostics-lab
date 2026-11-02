@@ -16,7 +16,6 @@ public sealed partial class EventsViewModel : PageViewModel
     private const int PageSize = 300;
     private EventQuery? _lastQuery;
     private int _loaded;
-    private bool _loadedOnce;
 
     public EventsViewModel(ViewContext context) : base(context)
     {
@@ -92,16 +91,14 @@ public sealed partial class EventsViewModel : PageViewModel
             SelectedChannel = Channels[0];
         }
 
-        if (!_loadedOnce)
-        {
-            _loadedOnce = true;
-            await SearchAsync();
-        }
+        await LoadOnce(SearchAsync);
     }
 
     /// <summary>Opens one event (navigation from other screens).</summary>
     public async Task OpenEventAsync(long id)
     {
+        // The list must be loaded before the opened event's row is added, or the first search would replace it.
+        await LoadOnce(SearchAsync);
         var e = await Task.Run(() => Context.Store.GetEvent(id));
         if (e is null)
         {
@@ -109,7 +106,12 @@ public sealed partial class EventsViewModel : PageViewModel
             return;
         }
 
-        GroupMode = false;
+        if (GroupMode)
+        {
+            GroupMode = false; // starts a list search
+            await SearchAsync(); // runs after it, so the row below is added to the finished list
+        }
+
         var row = EventRow.From(e, Context.Store.LastAcknowledgedEventId);
         if (!Events.Any(r => r.Id == id))
         {

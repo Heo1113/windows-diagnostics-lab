@@ -35,6 +35,13 @@ public sealed record EngineOptions
     public bool StartBackgroundLoops { get; init; } = true;
 
     public bool ScanDumps { get; init; } = true;
+
+    /// <summary>
+    /// Record sensor samples while the engine runs. Off for command-line work that only reads the database (status,
+    /// report, export...), which must not add samples or a "sensor unavailable" gap each time it is used.
+    /// </summary>
+    public bool RecordSensors { get; init; } = true;
+
     public PrivacyMasker? Masker { get; init; }
     public TimeProvider? Time { get; init; }
     public IAppLogger? Log { get; init; }
@@ -327,7 +334,7 @@ public sealed class DiagnosticsEngine : IAsyncDisposable
 
     private void StartSensors()
     {
-        if (!_settings.Sensors.Enabled)
+        if (!_options.RecordSensors || !_settings.Sensors.Enabled)
         {
             return;
         }

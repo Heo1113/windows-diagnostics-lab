@@ -127,6 +127,27 @@ public class DiagnosticsStoreTests
     }
 
     [Fact]
+    public void A_session_added_as_finished_is_never_taken_for_an_unclean_end()
+    {
+        // The virtual scenario records its past mock session this way; when seeding is interrupted after this call the
+        // session must not become an "app ended uncleanly" gap (found by killing `wdl demo` while it was writing).
+        using var dir = new TempDir();
+        var path = dir.File("wdl.db");
+        using (var store = DiagnosticsStore.Open(path))
+        {
+            var run = store.AddFinishedRun(T0, T0.AddHours(3), RunEndReasons.Normal, "test+virtual", isMock: true, sensorIntervalMs: 5000, elevated: false);
+            store.WriteSensorSample(run, Sample(T0.AddSeconds(5)));
+        }
+
+        using var reopened = DiagnosticsStore.Open(path);
+        Assert.Empty(reopened.RecoverUnfinishedRuns());
+        Assert.Empty(reopened.ListGaps());
+        var run1 = Assert.Single(reopened.ListRuns());
+        Assert.Equal(T0.AddHours(3), run1.Ended);
+        Assert.Equal(RunEndReasons.Normal, run1.EndReason);
+    }
+
+    [Fact]
     public void Sensor_samples_keep_missing_values_as_null_and_downsample_on_request()
     {
         using var dir = new TempDir();

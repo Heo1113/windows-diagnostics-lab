@@ -52,6 +52,19 @@ public abstract partial class PageViewModel(ViewContext context) : ObservableObj
 
     public virtual Task OnActivatedAsync() => Task.CompletedTask;
 
+    private Task? _firstLoad;
+
+    /// <summary>True once the page's first load has been started (it may still be running).</summary>
+    protected bool HasStartedFirstLoad => _firstLoad is not null;
+
+    /// <summary>
+    /// Starts the page's first load once; every later call returns the same task. An activation or navigation that
+    /// arrives while the first load is still running therefore waits for the data instead of returning early, and work
+    /// that follows (opening one event, selecting one crash) cannot be overwritten by the first load finishing later.
+    /// The load must not throw (page work goes through <see cref="Busy"/>, which reports failures in the status line).
+    /// </summary>
+    protected Task LoadOnce(Func<Task> load) => _firstLoad ??= load();
+
     public virtual void OnSensor(HardwareSnapshot snapshot)
     {
     }

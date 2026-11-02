@@ -67,7 +67,7 @@ jobs:
         shell: pwsh
         run: ./scripts/publish.ps1 -OutputDir dist
 
-      - name: GUI smoke test (published EXE, every screen, real logs + demo data, mock sensors)
+      - name: GUI smoke test (published EXE, every screen, real logs + demo data, mock sensors, restart after being killed)
         shell: pwsh
         run: ./scripts/smoke-gui.ps1 -Exe dist/WindowsDiagnosticsLab-win-x64/WindowsDiagnosticsLab.exe -ReportDir dist/smoke
 

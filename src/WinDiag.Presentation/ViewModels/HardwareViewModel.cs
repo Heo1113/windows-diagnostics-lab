@@ -17,7 +17,6 @@ namespace WinDiag.Presentation.ViewModels;
 public sealed partial class HardwareViewModel : PageViewModel
 {
     private DateTimeOffset _lastLive;
-    private bool _loadedInfo;
 
     public HardwareViewModel(ViewContext context) : base(context)
     {
@@ -60,12 +59,7 @@ public sealed partial class HardwareViewModel : PageViewModel
 
     public override async Task OnActivatedAsync()
     {
-        if (!_loadedInfo)
-        {
-            _loadedInfo = true;
-            await LoadInfoAsync();
-        }
-
+        await LoadOnce(() => Busy(LoadInfoAsync));
         await RefreshChartsAsync();
     }
 
@@ -112,6 +106,16 @@ public sealed partial class HardwareViewModel : PageViewModel
 
     public override void OnSensor(HardwareSnapshot snapshot)
     {
+        ShowLive(snapshot);
+        if (SelectedRange.Value == 0 && !IsFocused && snapshot.Timestamp - _lastLive > TimeSpan.FromSeconds(10))
+        {
+            _lastLive = snapshot.Timestamp;
+            _ = RefreshChartsAsync();
+        }
+    }
+
+    private void ShowLive(HardwareSnapshot snapshot)
+    {
         var gpu = snapshot.Gpus.FirstOrDefault();
         var rows = new List<NameValueRow>
         {
@@ -132,11 +136,6 @@ public sealed partial class HardwareViewModel : PageViewModel
         }
 
         Replace(Live, rows);
-        if (SelectedRange.Value == 0 && !IsFocused && snapshot.Timestamp - _lastLive > TimeSpan.FromSeconds(10))
-        {
-            _lastLive = snapshot.Timestamp;
-            _ = RefreshChartsAsync();
-        }
     }
 
     private (DateTimeOffset From, DateTimeOffset To) CurrentRange()
@@ -216,7 +215,8 @@ public sealed partial class HardwareViewModel : PageViewModel
             c.RequiresElevation ? "필요" : "불필요", c.Detail ?? "")));
         if (engine.Recorder?.Live.Latest is { } snapshotNow)
         {
-            OnSensor(snapshotNow);
+            // Values only: the charts are refreshed by the activation that runs this load.
+            ShowLive(snapshotNow);
         }
     }
 }

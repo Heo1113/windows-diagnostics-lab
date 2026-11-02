@@ -15,6 +15,7 @@ namespace WinDiag.Tests.Windows;
 /// Runs against the real Windows APIs of the machine running the tests (Windows CI runner). These verify that the
 /// event log queries, WMI reads and missing-sensor handling work on Windows; they are skipped elsewhere.
 /// The CI runner has no NVIDIA GPU and its logs are not the user's PC: results say nothing about RTX 5080 hardware.
+/// The runner's account is an administrator, so these tests do not show behaviour under standard user rights.
 /// </summary>
 public class WindowsIntegrationTests
 {
@@ -113,7 +114,7 @@ public class WindowsIntegrationTests
 
     [Fact]
     [SupportedOSPlatform("windows")]
-    public void Configuration_snapshot_reads_windows_version_without_admin_rights()
+    public void Configuration_snapshot_reads_windows_version_and_hardware()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), WindowsOnly);
         var snapshot = new WindowsSnapshotProvider(() => null).Collect(includeDrivers: true, TestContext.Current.CancellationToken);

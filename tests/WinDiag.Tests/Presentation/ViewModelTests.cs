@@ -192,6 +192,33 @@ public class ViewModelTests
     }
 
     [Fact]
+    public async Task Navigation_waits_for_the_first_load_of_each_page()
+    {
+        // Setting CurrentPage starts the page's first load without waiting; whatever is awaited right after it must see
+        // that load finished (this raced on a slow CI runner before the first load was shared).
+        await using var h = await AppHarness.CreateAsync();
+        h.Main.CurrentPage = h.Main.Hardware;
+        await h.Main.Hardware.OnActivatedAsync();
+        Assert.NotEmpty(h.Main.Hardware.Capabilities);
+        Assert.NotEmpty(h.Main.Hardware.Info);
+
+        // An informational event is not in the default list (warnings and above), so only the opened row can show it.
+        var info = h.Engine.Store.QueryEvents(new WinDiag.Storage.EventQuery { Limit = 5000 }).First(e => e.Severity == WinDiag.Core.Events.DiagSeverity.Info);
+        h.Main.CurrentPage = h.Main.Events; // what ShowEvent does, with the open awaited
+        await h.Main.Events.OpenEventAsync(info.Id);
+        Assert.Equal(info.Id, h.Main.Events.SelectedEvent?.Id);
+        Assert.Contains(h.Main.Events.Events, r => r.Id == info.Id);
+
+        h.Main.CurrentPage = h.Main.Diagnostics;
+        await h.Main.Diagnostics.OnActivatedAsync();
+        Assert.NotNull(h.Main.Diagnostics.Report);
+
+        h.Main.ShowTimelineAround(info.TimeCreated);
+        await h.Main.Timeline.OnActivatedAsync();
+        Assert.NotEmpty(h.Main.Timeline.Items);
+    }
+
+    [Fact]
     public async Task Timeline_records_user_changes_and_makes_baselines()
     {
         await using var h = await AppHarness.CreateAsync();

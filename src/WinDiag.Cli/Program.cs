@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using LocalAiPerf.Core.Diagnostics;
 using WinDiag.Analysis;
 using WinDiag.Collection;
@@ -22,7 +24,7 @@ public static class Program
         사용법: wdl <명령> [옵션]
 
         명령:
-          status                          수집 상태와 데이터베이스 요약
+          status [--json]                 수집 상태와 데이터베이스 요약 (--json: 스크립트용, 무결성 검사·누락 종류 포함)
           collect [--days N] [--no-snapshot]
                                           이벤트 로그를 한 번 수집 (처음이면 과거 N일 포함), 구성 스냅샷, 덤프 확인
           import --from yyyy-MM-dd [--to yyyy-MM-dd]
@@ -41,6 +43,8 @@ public static class Program
         공통 옵션:
           --data-dir 폴더                 데이터 폴더 (기본: %LOCALAPPDATA%\WindowsDiagnosticsLab 또는 포터블 data 폴더)
           --mock-sensors                  테스트용 가상 센서
+
+        한 데이터 폴더는 한 프로그램만 사용할 수 있습니다. GUI가 같은 폴더로 실행 중이면 wdl은 실행되지 않습니다(종료 코드 3).
         """;
 
     public static async Task<int> Main(string[] args)
@@ -57,8 +61,8 @@ public static class Program
         {
             return args[0] switch
             {
-                "status" => await WithEngine(options, Status),
-                "collect" => await WithEngine(options, e => Collect(e, options)),
+                "status" => await WithEngine(options, e => Status(e, options)),
+                "collect" => await WithEngine(options, e => Collect(e, options), recordSensors: true),
                 "import" => await WithEngine(options, e => Import(e, options)),
                 "import-xml" => await WithEngine(options, e => ImportXml(e, options)),
                 "report" => await WithEngine(options, e => Report(e, options)),
@@ -83,10 +87,21 @@ public static class Program
         return code;
     }
 
-    private static async Task<int> WithEngine(Options options, Func<DiagnosticsEngine, Task<int>> action)
+    /// <param name="recordSensors">Only collection records sensor samples; commands that read the database do not.</param>
+    private static async Task<int> WithEngine(Options options, Func<DiagnosticsEngine, Task<int>> action, bool recordSensors = false)
     {
         var paths = AppPaths.Resolve(options.DataDirectory, AppContext.BaseDirectory);
         paths.EnsureDirectories();
+
+        // The GUI and wdl never share a data folder at the same time: starting the engine closes unfinished sessions as
+        // "ended uncleanly", which would be wrong for a GUI that is still running.
+        using var folderLock = DataFolderLock.TryAcquire(paths.DataDirectory);
+        if (folderLock is null)
+        {
+            return Fail($"이 데이터 폴더를 다른 Windows Diagnostics Lab(GUI 또는 wdl)이 사용 중입니다: {paths.DataDirectory}\n"
+                        + "GUI를 닫은 뒤 다시 실행하거나 --data-dir로 다른 폴더를 지정하세요.", 3);
+        }
+
         using var fileLog = new FileAppLogger(paths.LogDirectory, filePrefix: AppInfo.ShortName + "-cli");
         var settings = new SettingsStore(paths.SettingsPath).Load().Settings;
         if (options.Days is int days)
@@ -98,10 +113,15 @@ public static class Program
         var engine = await DiagnosticsEngine.StartAsync(new EngineOptions
         {
             Paths = paths, Settings = settings, UseMockSensors = options.MockSensors, StartBackgroundLoops = false, ScanDumps = false, Log = fileLog,
+            RecordSensors = recordSensors,
         });
         try
         {
-            Console.WriteLine($"{AppInfo.ProductName} {AppInfo.Version} · 데이터 폴더 {paths.DataDirectory}{(paths.IsPortable ? " (포터블)" : "")}");
+            if (!options.Json)
+            {
+                Console.WriteLine($"{AppInfo.ProductName} {AppInfo.Version} · 데이터 폴더 {paths.DataDirectory}{(paths.IsPortable ? " (포터블)" : "")}");
+            }
+
             return await action(engine);
         }
         finally
@@ -110,9 +130,35 @@ public static class Program
         }
     }
 
-    private static Task<int> Status(DiagnosticsEngine engine)
+    private static Task<int> Status(DiagnosticsEngine engine, Options options)
     {
         var stats = engine.Store.GetStats();
+        if (options.Json)
+        {
+            // For scripts (the CI abnormal-end check): ASCII keys, times in ISO 8601.
+            var status = new
+            {
+                product = AppInfo.ProductName,
+                version = AppInfo.Version,
+                dataDirectory = engine.Paths.DataDirectory,
+                database = new
+                {
+                    stats.FileBytes, stats.Events, stats.VirtualEvents, stats.SensorSamples, stats.Snapshots, stats.Runs, stats.Gaps, stats.OldestEvent,
+                    stats.NewestEvent,
+                },
+                integrity = engine.Store.IntegrityCheck(),
+                recoveredRuns = engine.RecoveredRuns.Select(r => new { r.Id, r.Started, r.Ended, r.EndReason }),
+                gapKinds = engine.Store.ListGaps(limit: 100_000).GroupBy(g => g.Kind).ToDictionary(g => g.Key, g => g.Count()),
+                channels = engine.Store.GetChannelStates().Select(c => new { c.Channel, status = c.Status.ToString(), c.LastRecordId, c.OldestEventTime, c.LastScan }),
+                eventCollectionUnavailable = engine.EventCollectionUnavailableReason,
+            };
+            Console.WriteLine(JsonSerializer.Serialize(status, new JsonSerializerOptions
+            {
+                WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            }));
+            return Task.FromResult(0);
+        }
+
         Console.WriteLine($"데이터베이스: {stats.FileBytes / 1048576.0:0.0} MB, 이벤트 {stats.Events:N0}건 (가상 {stats.VirtualEvents:N0}), 센서 샘플 {stats.SensorSamples:N0}, 스냅샷 {stats.Snapshots}, 누락·제한 {stats.Gaps}");
         Console.WriteLine($"이벤트 기간: {Time(stats.OldestEvent)} ~ {Time(stats.NewestEvent)}");
         foreach (var c in engine.Store.GetChannelStates())
@@ -379,6 +425,7 @@ public static class Program
         public string? Out { get; init; }
         public bool Detailed { get; init; }
         public bool NoSnapshot { get; init; }
+        public bool Json { get; init; }
         public string? Baseline { get; init; }
         public int? Before { get; init; }
         public int? After { get; init; }
@@ -403,6 +450,7 @@ public static class Program
                     case "--out": o = o with { Out = Next() }; break;
                     case "--detailed": o = o with { Detailed = true }; break;
                     case "--no-snapshot": o = o with { NoSnapshot = true }; break;
+                    case "--json": o = o with { Json = true }; break;
                     case "--baseline": o = o with { Baseline = Next() }; break;
                     case "--before": o = o with { Before = Int() }; break;
                     case "--after": o = o with { After = Int() }; break;

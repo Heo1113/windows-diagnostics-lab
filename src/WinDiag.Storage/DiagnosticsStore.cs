@@ -193,6 +193,25 @@ public sealed partial class DiagnosticsStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Records a session that is already over (imported or virtual data) in one statement, so it can never be left open
+    /// and later be taken for a session of this app that ended uncleanly.
+    /// </summary>
+    public long AddFinishedRun(DateTimeOffset started, DateTimeOffset ended, string endReason, string appVersion, bool isMock, int sensorIntervalMs,
+        bool elevated)
+    {
+        lock (_writeGate)
+        {
+            ThrowIfDisposed();
+            return ScalarLong(_writer, """
+                INSERT INTO runs (started_ms, heartbeat_ms, ended_ms, end_reason, app_version, is_mock, sensor_interval_ms, elevated)
+                VALUES (@s, @t, @t, @r, @v, @m, @i, @e) RETURNING id;
+                """, null,
+                ("@s", started.ToUnixTimeMilliseconds()), ("@t", ended.ToUnixTimeMilliseconds()), ("@r", endReason), ("@v", appVersion),
+                ("@m", isMock ? 1 : 0), ("@i", sensorIntervalMs), ("@e", elevated ? 1 : 0));
+        }
+    }
+
     public void Heartbeat(long runId, DateTimeOffset time)
     {
         lock (_writeGate)

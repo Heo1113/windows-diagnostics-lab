@@ -16,7 +16,6 @@ namespace WinDiag.Presentation.ViewModels;
 public sealed partial class DiagnosticsViewModel : PageViewModel
 {
     private DiagnosticReport? _report;
-    private bool _ranOnce;
 
     public DiagnosticsViewModel(ViewContext context) : base(context)
     {
@@ -52,17 +51,11 @@ public sealed partial class DiagnosticsViewModel : PageViewModel
 
     partial void OnSelectedCrashChanged(CrashRow? value) => ShowCrash(value?.Id);
 
-    public override async Task OnActivatedAsync()
-    {
-        if (!_ranOnce)
-        {
-            _ranOnce = true;
-            await RunAsync();
-        }
-    }
+    public override Task OnActivatedAsync() => LoadOnce(RunAsync);
 
     public async Task SelectIncidentAsync(string id)
     {
+        await LoadOnce(RunAsync); // navigation starts the first analysis; wait for it instead of running a second one
         if (_report is null || _report.Crashes.All(c => c.Id != id))
         {
             SelectedRange = Ranges[^1];

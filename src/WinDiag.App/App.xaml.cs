@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using LocalAiPerf.Core.Diagnostics;
@@ -19,7 +17,7 @@ namespace WinDiag.App;
 /// <summary>Application start and shutdown. Structure adapted from project A's App.xaml.cs (commit 5b6aae1).</summary>
 public partial class App : Application, IAppHost
 {
-    private Mutex? _singleInstance;
+    private DataFolderLock? _singleInstance;
     private FileAppLogger? _fileLog;
     private MemoryLogSink? _log;
     private DiagnosticsEngine? _engine;
@@ -48,18 +46,16 @@ public partial class App : Application, IAppHost
             return;
         }
 
-        // One instance per data folder: two collectors on one database would only waste work.
-        var mutexName = "Local\\WindowsDiagnosticsLab-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_paths.DataDirectory.ToUpperInvariant())))[..16];
-        _singleInstance = new Mutex(initiallyOwned: true, mutexName, out var createdNew);
-        if (!createdNew)
+        // One process per data folder (this app or wdl): see DataFolderLock. Released by the OS if the app is killed.
+        _singleInstance = DataFolderLock.TryAcquire(_paths.DataDirectory);
+        if (_singleInstance is null)
         {
             if (!Options.SmokeTest)
             {
-                MessageBox.Show("Windows Diagnostics Lab이 이미 실행 중입니다 (같은 데이터 폴더).", "이미 실행 중", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("같은 데이터 폴더를 쓰는 Windows Diagnostics Lab(또는 wdl 명령)이 이미 실행 중입니다.", "이미 실행 중", MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
 
-            _singleInstance.Dispose();
-            _singleInstance = null;
             Shutdown(3);
             return;
         }
@@ -282,20 +278,8 @@ public partial class App : Application, IAppHost
 
     private void ReleaseSingleInstance()
     {
-        if (_singleInstance is not null)
-        {
-            try
-            {
-                _singleInstance.ReleaseMutex();
-            }
-            catch (ApplicationException)
-            {
-                // Released already or owned by another thread.
-            }
-
-            _singleInstance.Dispose();
-            _singleInstance = null;
-        }
+        _singleInstance?.Dispose();
+        _singleInstance = null;
     }
 
     private void RegisterExceptionHandlers()

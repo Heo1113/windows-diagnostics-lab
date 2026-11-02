@@ -177,7 +177,9 @@ public static class VirtualScenario
         store.AddBaseline(new Baseline { Name = Marker + "GPU 드라이버 581.15 설치", Time = driver, Description = "가상 시나리오 기준선" });
         store.AddBaseline(new Baseline { Name = Marker + "EXPO 적용", Time = expo, UserRecordId = recordId });
 
-        var run = store.StartRun(now.AddDays(-13), AppInfo.Version + "+virtual", isMock: true, sensorIntervalMs: 5000, elevated: false);
+        // Closed from the start: if seeding is interrupted, the virtual session must not look like a real unclean end.
+        var run = store.AddFinishedRun(now.AddDays(-13), now.AddDays(-1).AddHours(2), RunEndReasons.Normal, AppInfo.Version + "+virtual", isMock: true,
+            sensorIntervalMs: 5000, elevated: false);
         var samples = new List<HardwareSnapshot>();
         foreach (var (day, hour, minute) in new[] { (-12, 22, 5), (-9, 21, 47), (-6, 22, 30), (-3, 22, 12), (-1, 21, 55) })
         {
@@ -228,7 +230,6 @@ public static class VirtualScenario
         }
 
         store.WriteSensorSamples(run, samples);
-        store.EndRun(run, now.AddDays(-1).AddHours(2), RunEndReasons.Normal);
     }
 
     public static SystemSnapshot MockSnapshot(DateTimeOffset at, string gpuDriver, string nvidiaVersion) => new()
