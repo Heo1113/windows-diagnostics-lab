@@ -12,6 +12,7 @@ internal sealed class FakeDialogs(string folder) : IDialogService
 {
     public bool ConfirmAnswer { get; set; }
     public string? PromptAnswer { get; set; } = "테스트 기준선";
+    public string? OpenAnswer { get; set; }
     public List<string> Log { get; } = [];
 
     public string? SaveFile(string title, string filter, string defaultFileName, string? initialDirectory = null)
@@ -23,7 +24,7 @@ internal sealed class FakeDialogs(string folder) : IDialogService
     public string? OpenFile(string title, string filter, string? initialDirectory = null)
     {
         Log.Add("open:" + title);
-        return null;
+        return OpenAnswer;
     }
 
     public string? PickFolder(string title, string? initialDirectory = null) => folder;
@@ -41,6 +42,17 @@ internal sealed class FakeDialogs(string folder) : IDialogService
     public string? Prompt(string title, string message, string defaultValue) => PromptAnswer;
 }
 
+internal sealed class FakeHost : IAppHost
+{
+    public List<string> Restores { get; } = [];
+
+    public Task RestoreAndRestartAsync(string backupPath)
+    {
+        Restores.Add(backupPath);
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class FakeShell : IShellService
 {
     public List<string> Opened { get; } = [];
@@ -55,17 +67,19 @@ internal sealed class AppHarness : IAsyncDisposable
 {
     private readonly TempDir _dir;
 
-    private AppHarness(TempDir dir, DiagnosticsEngine engine, FakeDialogs dialogs, MainViewModel main, SettingsStore settings)
+    private AppHarness(TempDir dir, DiagnosticsEngine engine, FakeDialogs dialogs, FakeHost host, MainViewModel main, SettingsStore settings)
     {
         _dir = dir;
         Engine = engine;
         Dialogs = dialogs;
+        Host = host;
         Main = main;
         SettingsStore = settings;
     }
 
     public DiagnosticsEngine Engine { get; }
     public FakeDialogs Dialogs { get; }
+    public FakeHost Host { get; }
     public MainViewModel Main { get; }
     public SettingsStore SettingsStore { get; }
     public string Folder => _dir.Path;
@@ -88,12 +102,14 @@ internal sealed class AppHarness : IAsyncDisposable
         }
 
         var dialogs = new FakeDialogs(dir.Path);
+        var host = new FakeHost();
         var store = new SettingsStore(paths.SettingsPath);
         var context = new ViewContext
         {
             Engine = engine, SettingsStore = store, Ui = new InlineDispatcher(), Dialogs = dialogs, Shell = new FakeShell(), ExportMasker = PrivacyMasker.Generic,
+            Host = host,
         };
-        return new AppHarness(dir, engine, dialogs, new MainViewModel(context), store);
+        return new AppHarness(dir, engine, dialogs, host, new MainViewModel(context), store);
     }
 
     public async ValueTask DisposeAsync()
@@ -331,5 +347,32 @@ public class ViewModelTests
         Assert.Equal(0, h.Engine.Store.GetStats().VirtualEvents);
         await settings.OnActivatedAsync();
         Assert.NotEmpty(settings.DatabaseInfo);
+    }
+
+    [Fact]
+    public async Task Restore_checks_the_backup_and_asks_before_handing_it_to_the_app()
+    {
+        // The app side (stop, swap with the current database kept aside, restart) is DiagnosticsStore.RestoreFrom, tested
+        // in the storage tests; the restart itself is not covered by automated tests.
+        await using var h = await AppHarness.CreateAsync(demo: false);
+        var settings = h.Main.Settings;
+
+        h.Dialogs.OpenAnswer = Path.Combine(h.Folder, "not-a-database.db");
+        await File.WriteAllTextAsync(h.Dialogs.OpenAnswer, "this is not SQLite", TestContext.Current.CancellationToken);
+        await settings.RestoreCommand.ExecuteAsync(null);
+        Assert.Contains("error:복원할 수 없음", h.Dialogs.Log);
+        Assert.Empty(h.Host.Restores);
+
+        h.Dialogs.ConfirmAnswer = true;
+        await settings.BackupCommand.ExecuteAsync(null);
+        var backup = Directory.GetFiles(h.Folder, "wdl-backup-*.db").Single();
+        h.Dialogs.OpenAnswer = backup;
+        h.Dialogs.ConfirmAnswer = false;
+        await settings.RestoreCommand.ExecuteAsync(null);
+        Assert.Empty(h.Host.Restores);
+
+        h.Dialogs.ConfirmAnswer = true;
+        await settings.RestoreCommand.ExecuteAsync(null);
+        Assert.Equal([backup], h.Host.Restores);
     }
 }
