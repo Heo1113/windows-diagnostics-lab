@@ -1,8 +1,10 @@
 namespace WinDiag.Storage;
 
 /// <summary>
-/// Database schema. Times are Unix milliseconds (UTC). The original event XML, user names, computer names,
-/// SIDs and serial numbers are never stored.
+/// Database schema. Times are Unix milliseconds (UTC). The original event XML is never stored and snapshots do not read
+/// serial numbers. User names, computer names and SIDs are masked before storage unless the user turns masking off.
+/// Device instance IDs in event data are kept as written (a USB one can contain the device's serial number); minimal
+/// exports shorten them.
 /// </summary>
 internal static class Schema
 {
