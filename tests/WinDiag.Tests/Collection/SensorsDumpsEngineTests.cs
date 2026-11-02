@@ -288,6 +288,45 @@ public class DiagnosticsEngineTests
     }
 
     [Fact]
+    public async Task Imports_and_the_demo_never_move_the_live_log_positions()
+    {
+        using var dir = new TempDir();
+        var paths = AppPaths.Resolve(dir.Path, dir.Path);
+        var settings = new AppSettings();
+        settings.Collection.Channels = [new ChannelSetting { Name = "System" }];
+        settings.Normalize();
+        var live = new MemoryEventSource("live", false);
+        live.Add(Ev.Make("disk", 7, 2, DateTimeOffset.UtcNow.AddHours(-1), record: 90_000));
+        var engine = await DiagnosticsEngine.StartAsync(new EngineOptions
+        {
+            Paths = paths, Settings = settings, UseMockSensors = true, EventSource = live, StartBackgroundLoops = false, ScanDumps = false,
+            Masker = PrivacyMasker.Generic,
+        });
+        try
+        {
+            await engine.PollNowAsync(TestContext.Current.CancellationToken);
+            var before = engine.Store.GetChannelState("System");
+            var gapsBefore = engine.Store.ListGaps().Count;
+
+            await engine.SeedVirtualScenarioAsync();
+            var import = await engine.ImportXmlFilesAsync([Fixtures.Path("events", "wevtutil-multi.xml")], TestContext.Current.CancellationToken);
+
+            Assert.Equal(3, import.Inserted);
+            Assert.Equal(before, engine.Store.GetChannelState("System"));
+            Assert.Equal(gapsBefore, engine.Store.ListGaps().Count);
+            var imported = engine.Store.QueryEvents(new EventQuery { Limit = 100_000 }).Where(e => e.Source == EventSources.Import).ToList();
+            Assert.Equal(3, imported.Count);
+            live.Add(Ev.Make("disk", 11, 2, DateTimeOffset.UtcNow, record: 90_001));
+            var next = await engine.PollNowAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(1, next!.Read);
+        }
+        finally
+        {
+            await engine.StopAsync();
+        }
+    }
+
+    [Fact]
     public async Task Demo_scenario_seeds_virtual_events_snapshots_records_and_mock_sensors()
     {
         using var dir = new TempDir();

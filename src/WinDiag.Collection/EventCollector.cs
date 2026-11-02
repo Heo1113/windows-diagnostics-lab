@@ -48,9 +48,16 @@ public sealed class EventCollector
     private readonly IAppLogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <param name="trackProgress">
+    /// False for imports and the virtual scenario: their events are stored, but the per-channel position and gap
+    /// records of the real logs are never touched (an imported "System" log must not move the live "System" position).
+    /// </param>
+    /// <param name="sourceOverride">Source label stored with every event (for example <see cref="EventSources.Import"/>).</param>
     public EventCollector(IEventLogSource source, DiagnosticsStore store, EventClassifier classifier, PrivacyMasker masker,
-        Func<AppSettings> settings, TimeProvider? time = null, IAppLogger? log = null)
+        Func<AppSettings> settings, TimeProvider? time = null, IAppLogger? log = null, bool trackProgress = true, string? sourceOverride = null)
     {
+        TrackProgress = trackProgress;
+        _sourceOverride = sourceOverride;
         _source = source;
         _store = store;
         _classifier = classifier;
@@ -61,6 +68,10 @@ public sealed class EventCollector
     }
 
     public IEventLogSource Source => _source;
+
+    public bool TrackProgress { get; }
+
+    private readonly string? _sourceOverride;
 
     /// <summary>Raised (on the collecting thread) after a scan stored new events.</summary>
     public event Action<StoredBatch>? EventsStored;
@@ -136,7 +147,7 @@ public sealed class EventCollector
     {
         var started = Stopwatch.StartNew();
         var now = _time.GetUtcNow();
-        var previous = _store.GetChannelState(channel) ?? new ChannelState { Channel = channel };
+        var previous = (TrackProgress ? _store.GetChannelState(channel) : null) ?? new ChannelState { Channel = channel };
         var gaps = new List<CollectionGap>();
         var probe = _source.Probe(channel);
         if (probe.Access != ChannelAccess.Ok)
@@ -155,7 +166,11 @@ public sealed class EventCollector
                 _log.Warn("collector", $"{channel}: {ChannelStatusText.Name(status)} - {probe.Message}");
             }
 
-            _store.SaveChannelState(previous with { Status = status, StatusMessage = $"{explanation} {probe.Message}".Trim(), LastScan = now });
+            if (TrackProgress)
+            {
+                _store.SaveChannelState(previous with { Status = status, StatusMessage = $"{explanation} {probe.Message}".Trim(), LastScan = now });
+            }
+
             return new ChannelReport(channel, status, probe.Message, 0, 0, 0, gaps, started.Elapsed);
         }
 
@@ -210,6 +225,10 @@ public sealed class EventCollector
         {
             source = EventSources.Virtual;
         }
+        else if (_sourceOverride is not null)
+        {
+            source = _sourceOverride;
+        }
 
         var maxSeen = resetMarker ? 0 : previous.LastRecordId ?? 0;
         DateTimeOffset? lastEventTime = previous.LastEventTime;
@@ -247,7 +266,7 @@ public sealed class EventCollector
                 updated = updated with { LastRecordId = 0 };
             }
 
-            var result = _store.InsertEvents(batch, updated);
+            var result = _store.InsertEvents(batch, TrackProgress ? updated : null);
             inserted += result.Inserted;
             duplicates += result.Duplicates;
             newIds.AddRange(result.NewIds);
@@ -299,7 +318,11 @@ public sealed class EventCollector
             finalMessage = ex.Message;
             gaps.Add(AddGap(channel, finalStatus == ChannelStatus.AccessDenied ? GapKinds.AccessDenied : GapKinds.ReadFailed, state.LastEventTime, now, now,
                 $"{ChannelStatusText.Explain(finalStatus, channel)} ({ex.Message}) 읽은 데까지는 저장했고 다음 확인 때 이어서 읽습니다."));
-            _store.SaveChannelState(state with { Status = finalStatus, StatusMessage = ex.Message, LastScan = now });
+            if (TrackProgress)
+            {
+                _store.SaveChannelState(state with { Status = finalStatus, StatusMessage = ex.Message, LastScan = now });
+            }
+
             _log.Warn("collector", $"{channel} 읽기 중단", ex);
         }
 
@@ -341,6 +364,11 @@ public sealed class EventCollector
     private CollectionGap AddGap(string scope, string kind, DateTimeOffset? from, DateTimeOffset? to, DateTimeOffset detected, string detail)
     {
         var gap = new CollectionGap { Scope = scope, Kind = kind, From = from, To = to, Detected = detected, Detail = detail };
+        if (!TrackProgress)
+        {
+            return gap; // gaps describe the real logs only
+        }
+
         var id = _store.AddGap(gap);
         return gap with { Id = id };
     }

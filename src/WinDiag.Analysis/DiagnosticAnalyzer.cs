@@ -262,6 +262,28 @@ public static class DiagnosticAnalyzer
 
     private sealed record ChangePoint(DateTimeOffset Time, string Label, bool Approximate);
 
+    /// <summary>
+    /// Change points closer than a day are one change (a driver install writes several events and the next snapshot
+    /// shows the same change), so the periods compared are never a few minutes long.
+    /// </summary>
+    private static List<ChangePoint> Cluster(List<ChangePoint> points)
+    {
+        var clusters = new List<List<ChangePoint>>();
+        foreach (var point in points.OrderBy(p => p.Time))
+        {
+            if (clusters.Count > 0 && point.Time - clusters[^1][0].Time <= TimeSpan.FromDays(1))
+            {
+                clusters[^1].Add(point);
+            }
+            else
+            {
+                clusters.Add([point]);
+            }
+        }
+
+        return clusters.Select(c => new ChangePoint(c[0].Time, string.Join(" + ", c.Select(p => p.Label).Distinct()), c.All(p => p.Approximate))).ToList();
+    }
+
     private static List<ChangePoint> ChangePoints(IReadOnlyList<EventPoint> points, List<DetectedChange> changes, IReadOnlyList<UserRecord> records)
     {
         var list = new List<ChangePoint>();
@@ -279,15 +301,29 @@ public static class DiagnosticAnalyzer
     private static IEnumerable<Finding> ChangePointAssociations(DiagnosticsStore store, AnalysisRange range, List<EventPoint> problems,
         IReadOnlyList<EventPoint> points, List<DetectedChange> changes, IReadOnlyList<UserRecord> records, DiagnosticOptions options)
     {
-        var changePoints = ChangePoints(points, changes, records);
+        var changePoints = Cluster(ChangePoints(points, changes, records));
         var window = TimeSpan.FromDays(options.ChangeWindowDays);
         var coverageStart = store.GetChannelStates().Where(c => c.Status == ChannelStatus.Ok).Select(c => c.HistoryFrom ?? c.OldestEventTime)
             .Where(t => t is not null).Select(t => t!.Value).DefaultIfEmpty(range.From).Min();
         var results = new List<Finding>();
-        foreach (var cp in changePoints)
+        for (var index = 0; index < changePoints.Count; index++)
         {
+            var cp = changePoints[index];
+
+            // Compare only the stretch since the previous change with the stretch until the next one, so another
+            // change is never inside either period.
             var beforeFrom = Max(Max(range.From, coverageStart), cp.Time - window);
+            if (index > 0)
+            {
+                beforeFrom = Max(beforeFrom, changePoints[index - 1].Time);
+            }
+
             var afterTo = Min(range.To, cp.Time + window);
+            if (index + 1 < changePoints.Count)
+            {
+                afterTo = Min(afterTo, changePoints[index + 1].Time);
+            }
+
             var beforeDays = (cp.Time - beforeFrom).TotalDays;
             var afterDays = (afterTo - cp.Time).TotalDays;
             if (beforeDays < 1 || afterDays < 1)
@@ -295,12 +331,16 @@ public static class DiagnosticAnalyzer
                 continue;
             }
 
-            // Confounders: other changes shortly before this one or anywhere inside its "after" window.
-            var others = changePoints.Where(o => o != cp && o.Time >= cp.Time.AddDays(-3) && o.Time <= afterTo).Select(o => o.Label).ToList();
+            var others = new List<string>();
+            if (index + 1 < changePoints.Count && changePoints[index + 1].Time - cp.Time < window)
+            {
+                others.Add($"이후 구간은 다음 변경({changePoints[index + 1].Label}) 전까지로 줄였습니다");
+            }
+
             foreach (var category in problems.Select(p => p.Category).Distinct())
             {
-                var kb = problems.Count(p => p.Category == category && p.Time >= beforeFrom && p.Time < cp.Time);
-                var ka = problems.Count(p => p.Category == category && p.Time >= cp.Time && p.Time <= afterTo);
+                var kb = CountOccurrences(problems, category, beforeFrom, cp.Time.AddTicks(-1));
+                var ka = CountOccurrences(problems, category, cp.Time, afterTo);
                 var p = RateStatistics.RateRatioPValue(kb, beforeDays, ka, afterDays);
                 var increased = ka >= 3 && ka / afterDays > 2 * (kb / beforeDays) && p < 0.05;
                 var decreased = kb >= 3 && kb / beforeDays > 2 * (ka / afterDays) && p < 0.05;
@@ -322,14 +362,40 @@ public static class DiagnosticAnalyzer
                     Severity = increased ? (DiagSeverity)Math.Max((int)DiagSeverity.Warning,
                         (int)problems.Where(x => x.Category == category && x.Time >= cp.Time).Select(x => x.Severity).DefaultIfEmpty(DiagSeverity.Warning).Max()) : DiagSeverity.Info,
                     Evidence = evidence,
-                    Caution = "시간적 선후 관계일 뿐 원인을 입증하지 않습니다."
-                              + (others.Count > 0 ? $" 같은 시기(직전 3일~이후 구간)의 다른 변경도 있어 이 변경 하나의 영향으로 볼 수 없습니다: {string.Join(" / ", others)}." : ""),
+                    Caution = "시간적 선후 관계일 뿐 원인을 입증하지 않습니다. 같은 기간의 사용 패턴(게임·AI 작업 시간 등) 변화도 빈도에 영향을 줍니다."
+                              + (others.Count > 0 ? $" {string.Join(" / ", others)}." : ""),
                     Score = (increased ? 300 : 100) - 100 * (p ?? 1),
                 });
             }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Events of a category in a period. For crash categories the events written at one boot (Kernel-Power 41 and
+    /// EventLog 6008, or several dump records) count as one occurrence.
+    /// </summary>
+    internal static int CountOccurrences(IEnumerable<EventPoint> points, string category, DateTimeOffset from, DateTimeOffset to)
+    {
+        var times = points.Where(p => p.Category == category && p.Time >= from && p.Time <= to).Select(p => p.TimeMs).Order().ToList();
+        if (!IsSystemCrash(category))
+        {
+            return times.Count;
+        }
+
+        var count = 0;
+        long? start = null;
+        foreach (var t in times)
+        {
+            if (start is null || t - start.Value > TimeSpan.FromMinutes(10).TotalMilliseconds)
+            {
+                count++;
+                start = t;
+            }
+        }
+
+        return count;
     }
 
     private static IEnumerable<Finding> CoOccurrence(List<EventPoint> problems, IReadOnlyList<EventPoint> points, DiagnosticOptions options)
@@ -381,7 +447,7 @@ public static class DiagnosticAnalyzer
                 {
                     Id = $"assoc-co-{a}-{b}",
                     Tier = FindingTier.Association,
-                    Title = $"{Name(a)}와(과) {Name(b)}이(가) 함께 기록되는 경향",
+                    Title = $"{Name(a)} ↔ {Name(b)}: 같은 시각에 함께 기록되는 경향",
                     Detail = string.Create(CultureInfo.InvariantCulture,
                         $"{Name(a)} {listA.Count}건 중 {observed}건이 {Name(b)}와 {options.CorrelationWindowSeconds}초 이내에 기록되었습니다. 우연히 겹칠 것으로 기대되는 수는 약 {expected:0.##}건입니다 (p={p:0.####})."),
                     Severity = (DiagSeverity)Math.Max((int)listA.Max(x => x.Severity), (int)listB.Max(x => x.Severity)),
@@ -461,7 +527,8 @@ public static class DiagnosticAnalyzer
             }
 
             var mean = power.Average();
-            var rank = powers.Count(v => v <= mean) / (double)powers.Count;
+            // Mid-rank: many samples at the same value (for example at the power limit) must not look like the very top.
+            var rank = (powers.Count(v => v < mean) + 0.5 * powers.Count(v => v == mean)) / powers.Count;
             var covered = $"{times.Count}건 중 {power.Count}건에 직전 센서 기록 있음";
             if (rank >= 0.9)
             {
@@ -469,7 +536,7 @@ public static class DiagnosticAnalyzer
                 {
                     Id = $"assoc-sensor-power-{key}",
                     Tier = FindingTier.Association,
-                    Title = $"{name}은(는) GPU 고부하 중에 기록되는 경향",
+                    Title = $"{name}: 기록 직전 GPU 고부하 경향",
                     Detail = string.Create(CultureInfo.InvariantCulture,
                         $"직전 2분 GPU 전력 평균 {mean:0} W — 분석 기간 전체 GPU 전력 분포의 상위 {Math.Max(1, (1 - rank) * 100):0}% 수준입니다 ({covered})."),
                     Severity = DiagSeverity.Warning,
@@ -484,7 +551,7 @@ public static class DiagnosticAnalyzer
                 {
                     Id = $"assoc-sensor-temp-{key}",
                     Tier = FindingTier.Association,
-                    Title = $"{name} 직전 GPU 온도가 높음",
+                    Title = $"{name}: 기록 직전 GPU 온도 높음",
                     Detail = string.Create(CultureInfo.InvariantCulture,
                         $"직전 2분 GPU 온도 평균 {temp.Average():0}°C (설정한 고온 기준 {options.HighGpuTempC}°C 이상, {covered})."),
                     Severity = DiagSeverity.Warning,

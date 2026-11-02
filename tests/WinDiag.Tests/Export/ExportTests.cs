@@ -111,3 +111,15 @@ public class ExportTests
         Assert.False(string.IsNullOrEmpty(ComparisonExporter.ToStoredJson(comparison)));
     }
 }
+
+public class DocumentationTests
+{
+    [Fact]
+    public void Event_catalog_document_matches_the_code()
+    {
+        // Regenerate with: wdl catalog --out docs/EVENT_CATALOG.md
+        var path = Path.Combine(Fixtures.RepositoryRoot(), "docs", "EVENT_CATALOG.md");
+        var expected = CatalogMarkdown.Build(EventCatalog.Default).ReplaceLineEndings("\n");
+        Assert.Equal(expected, File.ReadAllText(path).ReplaceLineEndings("\n"));
+    }
+}

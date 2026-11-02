@@ -59,6 +59,38 @@ jobs:
       - name: Test (unit tests and Windows integration tests against this runner's real logs)
         run: dotnet test --project tests/WinDiag.Tests -c Release --no-build --report-xunit-trx --results-directory TestResults
 
+      - name: CLI smoke test (this runner's real event logs, WMI snapshot, report, export, backup)
+        shell: pwsh
+        run: ./scripts/smoke-cli.ps1 -Configuration Release -ReportDir dist/smoke/cli
+
+      - name: Publish portable package (self-contained single-file EXEs)
+        shell: pwsh
+        run: ./scripts/publish.ps1 -OutputDir dist
+
+      - name: GUI smoke test (published EXE, every screen, real logs + demo data, mock sensors)
+        shell: pwsh
+        run: ./scripts/smoke-gui.ps1 -Exe dist/WindowsDiagnosticsLab-win-x64/WindowsDiagnosticsLab.exe -ReportDir dist/smoke
+
+      - name: Upload portable package
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WindowsDiagnosticsLab-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload smoke test evidence (screenshots, JSON reports, sample report)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-test-evidence
+          path: dist/smoke
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

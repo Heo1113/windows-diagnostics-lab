@@ -11,7 +11,35 @@ public sealed partial class DiagnosticsStore
     /// Stores one sensor snapshot from project A's HardwareMonitor. Values the sensor did not provide stay NULL
     /// (shown as N/A), never estimated. Returns false when a sample with the same timestamp already exists.
     /// </summary>
-    public bool WriteSensorSample(long runId, HardwareSnapshot snapshot)
+    public bool WriteSensorSample(long runId, HardwareSnapshot snapshot) => WriteSensorSamples(runId, [snapshot]) > 0;
+
+    /// <summary>Stores many samples in one transaction (imports and the virtual scenario). Returns how many were new.</summary>
+    public int WriteSensorSamples(long runId, IEnumerable<HardwareSnapshot> snapshots)
+    {
+        lock (_writeGate)
+        {
+            ThrowIfDisposed();
+            using var tx = _writer.BeginTransaction();
+            var inserted = 0;
+            long last = 0;
+            foreach (var snapshot in snapshots)
+            {
+                if (WriteOne(runId, snapshot, tx))
+                {
+                    inserted++;
+                }
+
+                last = Math.Max(last, snapshot.Timestamp.ToUnixTimeMilliseconds());
+            }
+
+            Execute(_writer, "UPDATE runs SET heartbeat_ms = MAX(COALESCE(heartbeat_ms, 0), @t) WHERE id = @id AND ended_ms IS NULL;", tx,
+                ("@t", last), ("@id", runId));
+            tx.Commit();
+            return inserted;
+        }
+    }
+
+    private bool WriteOne(long runId, HardwareSnapshot snapshot, SqliteTransaction tx)
     {
         var t = snapshot.Timestamp.ToUnixTimeMilliseconds();
         var flags = SensorFlags.None;
@@ -30,10 +58,7 @@ public sealed partial class DiagnosticsStore
             flags |= SensorFlags.GpuUnavailable;
         }
 
-        lock (_writeGate)
         {
-            ThrowIfDisposed();
-            using var tx = _writer.BeginTransaction();
             var inserted = Execute(_writer, """
                 INSERT OR IGNORE INTO sensor_samples (t_ms, run_id, cpu_util, ram_used, ram_total, flags)
                 VALUES (@t, @run, @cpu, @used, @total, @flags);
@@ -56,9 +81,6 @@ public sealed partial class DiagnosticsStore
                 }
             }
 
-            Execute(_writer, "UPDATE runs SET heartbeat_ms = MAX(COALESCE(heartbeat_ms, 0), @t) WHERE id = @id AND ended_ms IS NULL;", tx,
-                ("@t", t), ("@id", runId));
-            tx.Commit();
             return inserted > 0;
         }
     }

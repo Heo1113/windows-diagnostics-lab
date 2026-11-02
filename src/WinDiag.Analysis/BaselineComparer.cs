@@ -64,8 +64,9 @@ public static class BaselineComparer
 
         var categories = EventCategories.All
             .Where(c => c.Kind is TimelineKind.Error or TimelineKind.ProgramCrash or TimelineKind.SystemCrash)
-            .Select(c => Rate(c.Key, c.Name, beforePoints.Count(p => p.Category == c.Key && p.Severity >= DiagSeverity.Warning),
-                afterPoints.Count(p => p.Category == c.Key && p.Severity >= DiagSeverity.Warning)))
+            .Select(c => Rate(c.Key, c.Name,
+                DiagnosticAnalyzer.CountOccurrences(beforePoints.Where(p => p.Severity >= DiagSeverity.Warning), c.Key, effectiveBeforeFrom, before.To),
+                DiagnosticAnalyzer.CountOccurrences(afterPoints.Where(p => p.Severity >= DiagSeverity.Warning), c.Key, after.From, after.To)))
             .Where(r => r.BeforeCount + r.AfterCount > 0)
             .OrderByDescending(r => Math.Abs(r.AfterPerDay - r.BeforePerDay))
             .ToList();

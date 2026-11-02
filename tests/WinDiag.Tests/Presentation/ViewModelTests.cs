@@ -81,6 +81,7 @@ internal sealed class AppHarness : IAsyncDisposable
             Paths = paths, Settings = settings, UseMockSensors = true, EventSource = new MemoryEventSource("empty", false), StartBackgroundLoops = false,
             ScanDumps = false, Masker = PrivacyMasker.Generic,
         });
+        await engine.PollNowAsync(); // first scan of the (empty) real logs: records their status
         if (demo)
         {
             await engine.SeedVirtualScenarioAsync();

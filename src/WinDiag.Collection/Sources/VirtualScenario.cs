@@ -178,13 +178,14 @@ public static class VirtualScenario
         store.AddBaseline(new Baseline { Name = Marker + "EXPO 적용", Time = expo, UserRecordId = recordId });
 
         var run = store.StartRun(now.AddDays(-13), AppInfo.Version + "+virtual", isMock: true, sensorIntervalMs: 5000, elevated: false);
+        var samples = new List<HardwareSnapshot>();
         foreach (var (day, hour, minute) in new[] { (-12, 22, 5), (-9, 21, 47), (-6, 22, 30), (-3, 22, 12), (-1, 21, 55) })
         {
             var tdr = Day(now, day, hour, minute);
             for (var t = tdr.AddMinutes(-20); t <= tdr.AddMinutes(10); t = t.AddSeconds(5))
             {
                 var load = t < tdr ? Math.Min(1, (t - tdr.AddMinutes(-20)).TotalMinutes / 5) : 0.15;
-                store.WriteSensorSample(run, new HardwareSnapshot
+                samples.Add(new HardwareSnapshot
                 {
                     Timestamp = t,
                     IsMock = true,
@@ -202,6 +203,31 @@ public static class VirtualScenario
             }
         }
 
+        // Ordinary evenings (18:00-21:00) with light load, so the recorded distribution is not only the busy periods.
+        for (var day = -13; day <= -1; day++)
+        {
+            for (var t = Day(now, day, 18, 0); t < Day(now, day, 21, 0); t = t.AddSeconds(30))
+            {
+                var load = 0.12 + 0.1 * Math.Sin(t.ToUnixTimeSeconds() / 600.0);
+                samples.Add(new HardwareSnapshot
+                {
+                    Timestamp = t,
+                    IsMock = true,
+                    System = new SystemSample { CpuUtilizationPercent = 8 + 20 * load, MemoryUsedBytes = (long)(20e9 + 4e9 * load), MemoryTotalBytes = 64L << 30 },
+                    Gpus =
+                    [
+                        new GpuSample
+                        {
+                            Index = 0, Name = "MOCK GPU (가상)", UtilizationPercent = 5 + 40 * load, TemperatureC = 40 + 15 * load, PowerW = 30 + 120 * load,
+                            PowerLimitW = 360, MemoryUsedBytes = (long)(2e9 + 3e9 * load), MemoryTotalBytes = 16L << 30, GraphicsClockMhz = 300 + 1500 * load,
+                            MemoryClockMhz = 810, FanSpeedPercent = 30,
+                        },
+                    ],
+                });
+            }
+        }
+
+        store.WriteSensorSamples(run, samples);
         store.EndRun(run, now.AddDays(-1).AddHours(2), RunEndReasons.Normal);
     }
 

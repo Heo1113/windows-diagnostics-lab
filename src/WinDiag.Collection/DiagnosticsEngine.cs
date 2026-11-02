@@ -248,12 +248,29 @@ public sealed class DiagnosticsEngine : IAsyncDisposable
         return id;
     }
 
+    /// <summary>
+    /// Imports Windows event XML files (for example "wevtutil qe System /f:xml" output from another PC). The events are
+    /// stored with source "import"; the positions of this PC's live logs are not changed.
+    /// </summary>
+    public async Task<CollectionReport> ImportXmlFilesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
+    {
+        var source = MemoryEventSource.FromXmlFiles(paths);
+        var settings = _settings.Clone();
+        var channels = paths.Count == 0 ? [] : source.Channels;
+        settings.Collection.Channels = channels.Select(c => new ChannelSetting { Name = c, Enabled = true }).ToList();
+        var collector = new EventCollector(source, Store, EventClassifier.Default, _options.Masker ?? PrivacyMasker.ForCurrentMachine(), () => settings, _time, _log,
+            trackProgress: false, sourceOverride: EventSources.Import);
+        var report = await collector.ImportHistoryAsync(DateTimeOffset.MinValue.AddYears(1), _time.GetUtcNow().AddDays(1), null, cancellationToken).ConfigureAwait(false);
+        StatusChanged?.Invoke();
+        return report;
+    }
+
     /// <summary>Loads the virtual demo scenario into this database (events flagged virtual; sensors in a mock run).</summary>
     public async Task<CollectionReport> SeedVirtualScenarioAsync()
     {
         var now = _time.GetUtcNow();
         var source = VirtualScenario.BuildSource(now);
-        var collector = new EventCollector(source, Store, EventClassifier.Default, PrivacyMasker.Generic, () => _settings, _time, _log);
+        var collector = new EventCollector(source, Store, EventClassifier.Default, PrivacyMasker.Generic, () => _settings, _time, _log, trackProgress: false);
         var report = await collector.ImportHistoryAsync(now.AddDays(-31), now).ConfigureAwait(false);
         VirtualScenario.SeedSideData(Store, now);
         StatusChanged?.Invoke();

@@ -7,6 +7,7 @@
     <Project Path="src/WinDiag.Export/WinDiag.Export.csproj" />
     <Project Path="src/WinDiag.Presentation/WinDiag.Presentation.csproj" />
     <Project Path="src/WinDiag.App/WinDiag.App.csproj" />
+    <Project Path="src/WinDiag.Cli/WinDiag.Cli.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WinDiag.Tests/WinDiag.Tests.csproj" />

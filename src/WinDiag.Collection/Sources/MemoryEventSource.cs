@@ -16,6 +16,17 @@ public sealed class MemoryEventSource(string name, bool isVirtual) : IEventLogSo
     public string Name { get; } = name;
     public bool IsVirtual { get; } = isVirtual;
 
+    public IReadOnlyList<string> Channels
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _channels.Keys];
+            }
+        }
+    }
+
     /// <summary>Number of Read calls (tests).</summary>
     public int ReadCalls { get; private set; }
 
