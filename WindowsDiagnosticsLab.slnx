@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WinDiag.Core/WinDiag.Core.csproj" />
+    <Project Path="src/WinDiag.Storage/WinDiag.Storage.csproj" />
+    <Project Path="src/WinDiag.Collection/WinDiag.Collection.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WinDiag.Tests/WinDiag.Tests.csproj" />
+  </Folder>
+</Solution>

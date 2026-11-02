@@ -1,0 +1,158 @@
+{
+  "source": {
+    "name": "Local AI Performance Center (프로젝트 A)",
+    "repository": "https://github.com/Heo1113/local-ai-performance-center",
+    "commit": "5b6aae12c28efbdbebe9a7df280c02f5494b037e",
+    "commitDate": "2026-11-02T12:01:13+09:00",
+    "owner": "Heo1113 (이 저장소와 같은 소유자)",
+    "license": "A 저장소에는 LICENSE 파일이 없음. 재사용은 저장소 소유자의 지시(프로젝트 C 요구사항)에 따른 것이며, 아래 파일에는 제3자 소스 코드가 포함되어 있지 않음 (A의 THIRD-PARTY-NOTICES.md: 'No source code was copied from other projects')."
+  },
+  "files": [
+    {
+      "path": "src/LocalAiPerf.Core/Hardware/HardwareModels.cs",
+      "usedBy": "WinDiag.Core",
+      "purpose": "센서 값·상태 모델 (GpuSample, SystemSample, HardwareSnapshot, SensorStatus)",
+      "sourceSha256": "17855bc082fd60a2f194d745d17a8d708bea816cc48f53b33c723e12ca95c90a",
+      "currentSha256": "17855bc082fd60a2f194d745d17a8d708bea816cc48f53b33c723e12ca95c90a",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Core/Hardware/SensorProviders.cs",
+      "usedBy": "WinDiag.Core",
+      "purpose": "센서 공급자 인터페이스",
+      "sourceSha256": "caa2231258f03f16ce6137e68e4e3e92e0ab30464ff1698e37aef2c904a807a6",
+      "currentSha256": "caa2231258f03f16ce6137e68e4e3e92e0ab30464ff1698e37aef2c904a807a6",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Core/Metrics/MetricCatalog.cs",
+      "usedBy": "WinDiag.Core",
+      "purpose": "지표 키·출처 정의 (Strata 지표 정의도 포함되어 있으나 C는 GPU/시스템 지표만 사용)",
+      "sourceSha256": "0cd560a15e0400c37955195c45d0103df794ef3fb2a6b03b8e2cd5dfe8a5b65d",
+      "currentSha256": "0cd560a15e0400c37955195c45d0103df794ef3fb2a6b03b8e2cd5dfe8a5b65d",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Core/Metrics/NumberText.cs",
+      "usedBy": "WinDiag.Core",
+      "purpose": "수치 표시 형식",
+      "sourceSha256": "84461cd092fdb4bc8674a43cb33bf31fbcb07bb1fc1462be4764336e2dc12930",
+      "currentSha256": "84461cd092fdb4bc8674a43cb33bf31fbcb07bb1fc1462be4764336e2dc12930",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Core/Diagnostics/AppLog.cs",
+      "usedBy": "WinDiag.Core",
+      "purpose": "앱 로그·비밀정보 제거기(SecretRedactor)",
+      "sourceSha256": "673e014b870a0d2ff8069dc53d085d50096f09abccde8fa434c0bd8fc52c340e",
+      "currentSha256": "38e0f510259321184cdf09c0a0536a3315d424afb67ca4944aa50e07d28a778b",
+      "status": "modified",
+      "patch": "patches/AppLog.cs.patch",
+      "modification": "FileAppLogger에 선택 인자 filePrefix(기본값 \"lapc\")를 추가해 C의 로그 파일 이름을 wdl-*.log로 구분. 기존 동작은 기본값으로 그대로 유지."
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/HardwareMonitor.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "GPU+시스템 센서 결합, 예외 없이 샘플링",
+      "sourceSha256": "6e04851028d86e3549b0a6362680677a3f42ca5d9c4f3b11d12cd8f297b3b0d4",
+      "currentSha256": "6e04851028d86e3549b0a6362680677a3f42ca5d9c4f3b11d12cd8f297b3b0d4",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Nvml/NvmlApi.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "NVML 읽기 전용 바인딩 (System32에서만 로드)",
+      "sourceSha256": "6c0ea0f998d31b9620497b7fb4c7c76d9152288f2f0738c11a73aca0c6ff4373",
+      "currentSha256": "6c0ea0f998d31b9620497b7fb4c7c76d9152288f2f0738c11a73aca0c6ff4373",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Nvml/NvmlGpuProvider.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "NVIDIA GPU 센서",
+      "sourceSha256": "95f4ca6b56579a75a18da87ee80197a11cf55839647c6989f2f3c0700519ebd5",
+      "currentSha256": "95f4ca6b56579a75a18da87ee80197a11cf55839647c6989f2f3c0700519ebd5",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Platform/CpuUsageCalculator.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "CPU 사용률 계산",
+      "sourceSha256": "a5f851c7131caa719047bc7a19b034bc90e5429170c345107e3c63feea33360d",
+      "currentSha256": "a5f851c7131caa719047bc7a19b034bc90e5429170c345107e3c63feea33360d",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Platform/WindowsSystemProvider.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "Windows CPU·RAM (GetSystemTimes, GlobalMemoryStatusEx)",
+      "sourceSha256": "88e5261809dc035c4adef9e1e2ee6994fca32c641890d3a4bd5eb281ea9f0b8f",
+      "currentSha256": "88e5261809dc035c4adef9e1e2ee6994fca32c641890d3a4bd5eb281ea9f0b8f",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Platform/LinuxProcSystemProvider.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "Linux /proc (빌드 머신 테스트용)",
+      "sourceSha256": "62f9e6af90c7113a438b4aed1106636d7bcbd9150c5a3199239629357073e863",
+      "currentSha256": "62f9e6af90c7113a438b4aed1106636d7bcbd9150c5a3199239629357073e863",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Platform/UnsupportedSystemProvider.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "꺼짐/미지원 공급자",
+      "sourceSha256": "b5c1cea6586223c0823e55297e7ebc5ccd68cfbde61115a34f52ca4b28502624",
+      "currentSha256": "b5c1cea6586223c0823e55297e7ebc5ccd68cfbde61115a34f52ca4b28502624",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Telemetry/Mock/MockProviders.cs",
+      "usedBy": "WinDiag.Collection",
+      "purpose": "테스트용 가상 센서 (--mock-sensors)",
+      "sourceSha256": "9eafdbaa83d59fac9dfa1ee58f19f34424ab122482ea946fbaf3112b2cbd354f",
+      "currentSha256": "9eafdbaa83d59fac9dfa1ee58f19f34424ab122482ea946fbaf3112b2cbd354f",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Storage/SqliteHelpers.cs",
+      "usedBy": "WinDiag.Storage",
+      "purpose": "SQLite 연결 문자열·헤더 검사·손상 판별",
+      "sourceSha256": "2d0a119e51ddece3ae62fe5d77542fa99c2f1e69f8c9b6469999d65c4505fecf",
+      "currentSha256": "2d0a119e51ddece3ae62fe5d77542fa99c2f1e69f8c9b6469999d65c4505fecf",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Analytics/Statistics.cs",
+      "usedBy": "WinDiag.Analysis",
+      "purpose": "요약 통계·백분위·변화율",
+      "sourceSha256": "d2d88d3c42424691b2bc5ff58e35a9cf9394ebe06fc2d31776388e74d3f78c6e",
+      "currentSha256": "d2d88d3c42424691b2bc5ff58e35a9cf9394ebe06fc2d31776388e74d3f78c6e",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Export/CsvWriter.cs",
+      "usedBy": "WinDiag.Export",
+      "purpose": "RFC 4180 CSV, 수식 주입 방지",
+      "sourceSha256": "59f38140c6bef953ec63cbde5fca2460f4ff39592108dd66df806e1c02e02c5e",
+      "currentSha256": "59f38140c6bef953ec63cbde5fca2460f4ff39592108dd66df806e1c02e02c5e",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Presentation/Charts/ChartModel.cs",
+      "usedBy": "WinDiag.Presentation",
+      "purpose": "차트 모델·검증된 다크 팔레트",
+      "sourceSha256": "46081781b7a5174057310ce4d4d8d7f1173e630e795945700c2130b22bb04dd1",
+      "currentSha256": "46081781b7a5174057310ce4d4d8d7f1173e630e795945700c2130b22bb04dd1",
+      "status": "unchanged"
+    },
+    {
+      "path": "src/LocalAiPerf.Presentation/Charts/ChartRenderer.cs",
+      "usedBy": "WinDiag.Presentation",
+      "purpose": "ScottPlot 렌더링·한글 글꼴 선택",
+      "sourceSha256": "b534ddfb55e8c66515b786e72ff6b651518b7bdc4bda75211e1d7426aa69ffa5",
+      "currentSha256": "b534ddfb55e8c66515b786e72ff6b651518b7bdc4bda75211e1d7426aa69ffa5",
+      "status": "unchanged"
+    }
+  ]
+}
