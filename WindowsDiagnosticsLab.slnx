@@ -3,6 +3,7 @@
     <Project Path="src/WinDiag.Core/WinDiag.Core.csproj" />
     <Project Path="src/WinDiag.Storage/WinDiag.Storage.csproj" />
     <Project Path="src/WinDiag.Collection/WinDiag.Collection.csproj" />
+    <Project Path="src/WinDiag.Analysis/WinDiag.Analysis.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WinDiag.Tests/WinDiag.Tests.csproj" />
