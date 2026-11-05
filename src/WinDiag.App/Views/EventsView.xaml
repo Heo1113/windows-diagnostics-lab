@@ -11,8 +11,8 @@
   <Grid>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="250" />
-      <ColumnDefinition Width="*" />
-      <ColumnDefinition Width="440" />
+      <ColumnDefinition Width="2*" MinWidth="520" />
+      <ColumnDefinition Width="*" MinWidth="320" MaxWidth="440" />
     </Grid.ColumnDefinitions>
 
     <!-- Filters -->
@@ -85,17 +85,17 @@
             <DataGrid ItemsSource="{Binding Events}" SelectedItem="{Binding SelectedEvent}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="시각" Binding="{Binding Time, Mode=OneWay}" Width="140" />
+                <DataGridTextColumn Header="시각" Binding="{Binding Time, Mode=OneWay}" Width="SizeToCells" MinWidth="150" />
                 <DataGridTemplateColumn Header="중요도" Width="58">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate><TextBlock Text="{Binding Severity}" Foreground="{Binding Level, Converter={StaticResource StatusBrush}}" Margin="2" /></DataTemplate>
                   </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="분류" Binding="{Binding Category, Mode=OneWay}" Width="130" />
-                <DataGridTextColumn Header="공급자" Binding="{Binding Provider, Mode=OneWay}" Width="150" />
-                <DataGridTextColumn Header="ID" Binding="{Binding EventId, Mode=OneWay}" Width="56" />
-                <DataGridTextColumn Header="내용" Binding="{Binding Title, Mode=OneWay}" Width="*" />
-                <DataGridTextColumn Header="출처" Binding="{Binding Origin, Mode=OneWay}" Width="66" />
+                <DataGridTextColumn Header="분류" Binding="{Binding Category, Mode=OneWay}" Width="110" ElementStyle="{StaticResource TrimCell}" />
+                <DataGridTextColumn Header="공급자" Binding="{Binding Provider, Mode=OneWay}" Width="120" ElementStyle="{StaticResource TrimCell}" />
+                <DataGridTextColumn Header="ID" Binding="{Binding EventId, Mode=OneWay}" Width="SizeToCells" MinWidth="52" />
+                <!-- The origin (live or history) is shown in the detail panel; the list keeps its width for the title. -->
+                <DataGridTextColumn Header="내용" Binding="{Binding Title, Mode=OneWay}" Width="*" MinWidth="200" ElementStyle="{StaticResource TrimCell}" />
               </DataGrid.Columns>
             </DataGrid>
           </DockPanel>
@@ -110,8 +110,8 @@
               </DataGridTemplateColumn>
               <DataGridTextColumn Header="횟수" Binding="{Binding Count, Mode=OneWay}" Width="52" />
               <DataGridTextColumn Header="일수" Binding="{Binding Days, Mode=OneWay}" Width="44" />
-              <DataGridTextColumn Header="분류" Binding="{Binding Category, Mode=OneWay}" Width="120" />
-              <DataGridTextColumn Header="문제 (최근 기록 기준)" Binding="{Binding Title, Mode=OneWay}" Width="*" />
+              <DataGridTextColumn Header="분류" Binding="{Binding Category, Mode=OneWay}" Width="110" ElementStyle="{StaticResource TrimCell}" />
+              <DataGridTextColumn Header="문제 (최근 기록 기준)" Binding="{Binding Title, Mode=OneWay}" Width="*" MinWidth="200" ElementStyle="{StaticResource TrimCell}" />
               <DataGridTextColumn Header="처음" Binding="{Binding First, Mode=OneWay}" Width="135" />
               <DataGridTextColumn Header="마지막" Binding="{Binding Last, Mode=OneWay}" Width="135" />
               <DataGridTemplateColumn Width="70">

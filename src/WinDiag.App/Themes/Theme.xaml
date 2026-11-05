@@ -89,4 +89,11 @@
     <Setter Property="TextWrapping" Value="Wrap" />
     <Setter Property="Margin" Value="2" />
   </Style>
+
+  <!-- A cell that may be cut off: ends with "…" and shows the whole text on hover. -->
+  <Style x:Key="TrimCell" TargetType="TextBlock">
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="Margin" Value="2" />
+    <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+  </Style>
 </ResourceDictionary>
