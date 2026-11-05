@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  linux:
+    name: Linux - build (incl. WPF compile) and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build WindowsDiagnosticsLab.slnx -c Release
+
+      - name: Test
+        run: dotnet test --project tests/WinDiag.Tests -c Release --no-build
+
+  windows:
+    name: Windows x64 - build, tests (incl. real event logs), portable package
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build WindowsDiagnosticsLab.slnx -c Release
+
+      - name: Test (unit tests and Windows integration tests against this runner's real logs)
+        run: dotnet test --project tests/WinDiag.Tests -c Release --no-build --report-xunit-trx --results-directory TestResults
+
+      - name: CLI smoke test (this runner's real event logs, WMI snapshot, report, export, backup)
+        shell: pwsh
+        run: ./scripts/smoke-cli.ps1 -Configuration Release -ReportDir dist/smoke/cli
+
+      - name: Publish portable package (self-contained single-file EXEs)
+        shell: pwsh
+        run: ./scripts/publish.ps1 -OutputDir dist
+
+      - name: GUI smoke test (published EXE, every screen, real logs + demo data, mock sensors, restart after being killed)
+        shell: pwsh
+        run: ./scripts/smoke-gui.ps1 -Exe dist/WindowsDiagnosticsLab-win-x64/WindowsDiagnosticsLab.exe -ReportDir dist/smoke
+
+      - name: Upload portable package
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: WindowsDiagnosticsLab-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload smoke test evidence (screenshots, JSON reports, sample report)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-test-evidence
+          path: dist/smoke
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results-windows
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 30
