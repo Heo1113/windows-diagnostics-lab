@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -27,6 +29,7 @@ internal sealed class SmokeTestRunner(Window window, MainViewModel main, Diagnos
     private readonly BindingErrorListener _bindings = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly Dictionary<string, bool> _checks = [];
+    private readonly List<string> _wheel = [];
 
     public int? ExitCode { get; private set; }
 
@@ -121,6 +124,28 @@ internal sealed class SmokeTestRunner(Window window, MainViewModel main, Diagnos
             return main.Hardware.PowerChart is not null && main.Hardware.IsFocused;
         });
 
+        await Check("wheel-over-chart-and-table-scrolls-page", async () =>
+        {
+            main.CurrentPage = main.Hardware;
+            await Task.Delay(1000);
+            var chart = Descendants<Controls.ChartView>(window).FirstOrDefault(c => c.IsVisible);
+            var chartOk = WheelScrollsPage("hardware chart", chart);
+            main.CurrentPage = main.Dashboard;
+            await Task.Delay(1500);
+            await WaitUntil(() => !main.Dashboard.IsBusy, TimeSpan.FromSeconds(30));
+            // A table with more rows scrolls itself first; at its end the page must take over.
+            var grid = Descendants<DataGrid>(window).FirstOrDefault(g => g.IsVisible);
+            if (grid is not null && Descendants<ScrollViewer>(grid).FirstOrDefault() is { } inner)
+            {
+                inner.ScrollToEnd();
+                window.UpdateLayout();
+            }
+
+            var row = grid is null ? null : Descendants<DataGridRow>(grid).LastOrDefault(r => r.IsVisible);
+            var tableOk = WheelScrollsPage("dashboard table row (table at its end)", row);
+            return chartOk && tableOk;
+        });
+
         await Check("timeline-and-user-record", async () =>
         {
             main.CurrentPage = main.Timeline;
@@ -209,6 +234,7 @@ internal sealed class SmokeTestRunner(Window window, MainViewModel main, Diagnos
             otherBindingMessages = _bindings.Errors.Except(pathErrors).Take(50),
             notices = main.Notices,
             dialogs = dialogs.Log,
+            wheel = _wheel,
         };
         File.WriteAllText(Path.Combine(reportDirectory, "smoke-report.json"),
             JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
@@ -229,6 +255,68 @@ internal sealed class SmokeTestRunner(Window window, MainViewModel main, Diagnos
         }
 
         return condition();
+    }
+
+    /// <summary>
+    /// Sends a wheel-down the way Windows does (preview event from the window down, then the bubbling event if nobody
+    /// handled it) to an element inside a table or chart, and checks that the page scroll viewer moved.
+    /// A page that has nothing to scroll is recorded as not applicable.
+    /// </summary>
+    private bool WheelScrollsPage(string what, FrameworkElement? target)
+    {
+        if (target is null)
+        {
+            _wheel.Add($"{what}: 대상 없음");
+            return false;
+        }
+
+        ScrollViewer? page = null;
+        for (DependencyObject? node = target; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is ScrollViewer viewer)
+            {
+                page = viewer; // the outermost one wins
+            }
+        }
+
+        window.UpdateLayout();
+        if (page is null || page.ScrollableHeight <= 0)
+        {
+            _wheel.Add($"{what}: 페이지에 스크롤할 내용 없음 (해당 없음)");
+            return true;
+        }
+
+        page.ScrollToTop();
+        window.UpdateLayout();
+        var preview = new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = UIElement.PreviewMouseWheelEvent, Source = target };
+        target.RaiseEvent(preview);
+        if (!preview.Handled)
+        {
+            target.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = UIElement.MouseWheelEvent, Source = target });
+        }
+
+        window.UpdateLayout();
+        var moved = page.VerticalOffset > 0;
+        _wheel.Add($"{what}: 페이지 위치 {page.VerticalOffset:0.#} / {page.ScrollableHeight:0.#} ({(moved ? "스크롤됨" : "움직이지 않음")})");
+        page.ScrollToTop();
+        return moved;
+    }
+
+    private static IEnumerable<T> Descendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var inner in Descendants<T>(child))
+            {
+                yield return inner;
+            }
+        }
     }
 
     private async Task Capture(string name)

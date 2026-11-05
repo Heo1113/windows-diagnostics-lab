@@ -44,6 +44,7 @@
           </StackPanel>
         </Border>
         <TextBlock Text="{Binding ChartNote}" Style="{StaticResource Caption}" Margin="8,0,8,4" />
+        <TextBlock Text="차트 위에서 마우스 휠은 화면을 스크롤합니다. 시간축 확대·축소는 Ctrl+휠, 이동은 끌기입니다." Style="{StaticResource Caption}" Margin="8,0,8,4" />
         <UniformGrid Columns="2">
           <Border Style="{StaticResource Card}" Height="230"><c:ChartView Data="{Binding PowerChart}" Interactive="True" /></Border>
           <Border Style="{StaticResource Card}" Height="230"><c:ChartView Data="{Binding TempChart}" Interactive="True" /></Border>

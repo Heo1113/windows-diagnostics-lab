@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using LocalAiPerf.Presentation.Charts;
 using ScottPlot;
+using WinDiag.App.Services;
 using WinDiag.Presentation;
 
 namespace WinDiag.App.Controls;
@@ -27,6 +28,7 @@ public partial class ChartView : UserControl
         ApplyInteractivity();
         ChartRenderer.ApplyStyle(Plot.Plot);
         Loaded += (_, _) => ApplyDisplayScale(VisualTreeHelper.GetDpi(this));
+        PreviewMouseWheel += OnPreviewMouseWheel;
         Plot.Refresh();
     }
 
@@ -148,6 +150,30 @@ public partial class ChartView : UserControl
     }
 
     private void OnPlotMouseLeave(object sender, MouseEventArgs e) => Readout.Text = "";
+
+    /// <summary>
+    /// The wheel scrolls the page, never the chart. On an interactive chart, Ctrl+wheel zooms the time axis around the
+    /// pointer (drag still pans). ScottPlot's own wheel zoom never runs, because this handler takes the event first.
+    /// </summary>
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        if (Interactive && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            if (Data?.Model is { IsEmpty: false })
+            {
+                var x = Plot.Plot.GetCoordinates(Plot.GetPlotPixelPosition(e)).X;
+                var limits = Plot.Plot.Axes.GetLimits();
+                var factor = e.Delta > 0 ? 0.8 : 1.25;
+                Plot.Plot.Axes.SetLimitsX(x - (x - limits.Left) * factor, x + (limits.Right - x) * factor);
+                Plot.Refresh();
+            }
+
+            return;
+        }
+
+        WheelForwarding.ScrollOuter(this, e.Delta);
+    }
 
     private static int? Nearest(double[] xs, double x)
     {

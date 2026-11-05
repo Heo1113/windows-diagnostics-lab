@@ -64,6 +64,7 @@ public partial class App : Application, IAppHost
         _log = new MemoryLogSink(500, _fileLog);
         _log.Info("app", $"시작 {AppInfo.Version}, 데이터 폴더 {(_paths.IsPortable ? "(포터블)" : _paths.DataDirectory)}, 관리자 권한 {Environment.IsPrivilegedProcess}");
         RegisterExceptionHandlers();
+        WheelForwarding.Register();
 
         var settingsStore = new SettingsStore(_paths.SettingsPath);
         var loaded = settingsStore.Load();
