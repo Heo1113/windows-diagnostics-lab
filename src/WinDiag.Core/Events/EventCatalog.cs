@@ -16,6 +16,12 @@ public sealed class EventCatalog
     public const string KernelGeneral = "Microsoft-Windows-Kernel-General";
     public const string Scm = "Service Control Manager";
 
+    /// <summary>
+    /// Raise when rules or interpreters change. On start the engine re-classifies stored events once when the database
+    /// was classified with an older version, so old and new events are grouped the same way.
+    /// </summary>
+    public const int Version = 2;
+
     private const string StorageCaution = "케이블·연결, 컨트롤러 드라이버, 장치 펌웨어, 장치 자체 등 원인이 여러 가지입니다. 이 이벤트만으로 장치 고장을 확정할 수 없습니다. 중요한 데이터는 백업하고 제조사 도구로 장치 상태(SMART)를 확인하세요.";
     private const string WheaCaution = "드물게 기록되는 수정된(corrected) 오류는 정상 범위일 수도 있습니다. 반복 빈도와 설정 변경(오버클럭·EXPO·전압 등) 전후 비교가 필요하며, 이 이벤트만으로 특정 부품 불량을 확정할 수 없습니다.";
     private const string GpuCaution = "GPU 하드웨어, 드라이버, 과부하, 오버클럭·언더볼트, 전원 공급, 온도 등 여러 원인에서 발생할 수 있어 이 이벤트만으로 원인을 특정할 수 없습니다.";
@@ -400,6 +406,79 @@ public sealed class EventCatalog
             Provider = "Microsoft-Windows-DistributedCOM", EventIds = [10016], Category = Other, Severity = DiagSeverity.Info,
             Title = "DCOM 권한 경고 (10016)", Meaning = "구성 요소가 필요한 권한 없이 DCOM 서버에 접근하려 했다고 기록되었습니다.",
             Caution = "Microsoft는 Windows 구성 요소가 기록하는 이 이벤트가 일반적으로 기능에 영향을 주지 않으며 무시해도 된다고 안내합니다.",
+        },
+        // ---------------------------------------------------------------- frequent Windows errors that are usually not faults
+        // Added after the first run on the owner's PC (2026-11-05): these made up most of the uncatalogued errors.
+        new()
+        {
+            Provider = "Schannel", EventIds = [36874, 36887, 36888], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "TLS 연결 실패 (Schannel)", Interpret = EventInterpreters.Schannel,
+            Meaning = "보안 연결(TLS) 협상이 실패했습니다. 36874는 상대가 지원하는 암호화 방식 중 이 PC가 허용하는 것이 없을 때, 36887·36888은 협상 중 치명적 경고를 받거나 보냈을 때 기록됩니다. 연결을 처리한 프로세스가 함께 기록됩니다.",
+            Caution = "대부분 오래된 프로그램이나 다른 기기가 낮은 TLS 버전으로 접속을 시도한 경우이며 시스템 안정성과는 관계가 없습니다. 처리한 프로세스가 원격 데스크톱(TermService)이면 원격 데스크톱이 켜져 있다는 뜻이므로, 쓰지 않는다면 끄고 공유기에서 외부에 열려 있지 않은지 확인하세요. 이 기록만으로 공격 여부나 접속한 곳을 알 수 없습니다.",
+        },
+        new()
+        {
+            Provider = "Microsoft-Windows-DistributedCOM", EventIds = [10010], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "DCOM 서버 등록 시간 초과 (10010)", Interpret = EventInterpreters.Dcom10010,
+            Meaning = "COM 서버(주로 스토어 앱이나 백그라운드 구성 요소)가 정해진 시간 안에 DCOM에 등록하지 않았습니다.",
+            Caution = "앱이 백그라운드에서 늦게 시작되거나 종료되는 중에 흔히 기록되며, 그 앱이 실제로 동작하지 않을 때만 의미가 있습니다.",
+        },
+        new()
+        {
+            Provider = "Microsoft-Windows-DistributedCOM", EventIds = [10005], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "DCOM이 서비스를 시작하지 못함 (10005)", Interpret = EventInterpreters.Dcom10005,
+            Meaning = "COM 서버를 실행하기 위해 서비스를 시작하려 했지만 오류가 반환되었습니다. 서비스 이름과 오류 코드가 기록됩니다.",
+            Caution = "서비스가 사용 안 함으로 설정되었거나 앱 업데이트 중일 때도 기록됩니다. 해당 서비스를 쓰는 기능이 실제로 안 될 때만 확인하세요.",
+        },
+        new()
+        {
+            Provider = "VSS", EventIds = [13, 8193], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "볼륨 섀도 복사본(VSS) 오류", Interpret = EventInterpreters.Vss,
+            Meaning = "볼륨 섀도 복사본 서비스(복원 지점·백업에 사용)가 구성 요소를 시작하거나 호출하지 못했습니다. 결과 코드가 기록됩니다.",
+            Caution = "결과 코드가 0x8007045b(시스템을 종료하고 있음)이면 PC를 끄는 중에 남은 기록입니다. 그 밖의 코드가 PC 사용 중에 반복되면 복원 지점 만들기나 백업이 되는지 확인하세요. 이 기록만으로 디스크 이상을 뜻하지 않습니다.",
+        },
+        new()
+        {
+            Provider = "Microsoft-Windows-Search", EventIds = [3602, 7040, 7042], Category = ServiceFailure, CollectWarnings = false,
+            Title = "Windows Search 색인 서비스 오류", Interpret = EventInterpreters.WindowsSearch,
+            Meaning = "Windows Search 색인기가 복구 단계에서 실패해 서비스를 멈췄습니다. 사유와 결과 코드가 기록됩니다.",
+            Caution = "파일·시작 메뉴 검색과 색인에만 영향이 있고 시스템 안정성과는 별개입니다. 반복되면 서비스 재시작이나 색인 다시 만들기(설정 > 개인 정보 및 보안 > Windows 검색)가 안내됩니다. 이동식 드라이브 연결·분리, 색인 대상 변경과 함께 나타나기도 하지만 이 기록만으로 원인을 알 수 없습니다.",
+        },
+        new()
+        {
+            Provider = "Microsoft-Windows-Kernel-PnP", EventIds = [225], Category = Other, Severity = DiagSeverity.Warning,
+            Title = "프로그램이 장치 제거·꺼내기를 막음 (Kernel-PnP 225)", Interpret = EventInterpreters.KernelPnp225,
+            Meaning = "장치(주로 USB 저장장치)를 제거하거나 꺼내려 할 때 어떤 프로그램이 그 장치를 사용 중이어서 막았습니다. 막은 프로그램과 장치가 기록됩니다.",
+            Caution = "장치 고장이 아닙니다. 막은 프로그램이 장치의 파일을 열어 두었던 것입니다.",
+        },
+        new()
+        {
+            Provider = ".NET Runtime", EventIds = [1022], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = ".NET 프로파일러 연결 초기화 실패 (1022)",
+            Meaning = ".NET 프로그램이 시작될 때 진단용 프로파일러 연결 기능을 초기화하지 못했습니다. 프로그램 자체는 계속 실행될 수 있습니다.",
+            Caution = "보안·모니터링 프로그램이 .NET 프로그램에 연결하려 할 때 흔히 기록되며, 대개 동작에 영향이 없습니다.",
+            Interpret = EventInterpreters.MessageFirstLine,
+        },
+        new()
+        {
+            Provider = "Tcpip", EventIds = [4207], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "TCP/IP 인터페이스 바인딩 실패 (4207)", Interpret = EventInterpreters.MessageFirstLine,
+            Meaning = "네트워크 인터페이스가 TCP/IP 공급자에 연결되지 못했다고 기록되었습니다.",
+            Caution = "부팅·절전 해제 중 네트워크 어댑터가 준비되기 전에 흔히 기록됩니다. 네트워크가 실제로 끊길 때 같은 시각에 반복되는지만 확인하세요.",
+        },
+        new()
+        {
+            Provider = "NetBT", EventIds = [4307], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "NetBIOS over TCP/IP 초기화 실패 (4307)", Interpret = EventInterpreters.MessageFirstLine,
+            Meaning = "NetBIOS over TCP/IP가 초기 주소를 열지 못해 초기화되지 않았습니다.",
+            Caution = "부팅 중 네트워크가 준비되기 전에 흔히 기록됩니다. 오래된 방식의 파일 공유 이름 찾기에만 쓰이며 일반 인터넷 연결과는 대개 관계가 없습니다.",
+        },
+        new()
+        {
+            Provider = "Microsoft-Windows-DeviceAssociationService", EventIds = [3503], Category = Other, Severity = DiagSeverity.Warning, CollectWarnings = false,
+            Title = "장치 연결 서비스 검색 오류 (3503)", Interpret = EventInterpreters.MessageFirstLine,
+            Meaning = "장치 연결 서비스가 네트워크·무선 장치를 찾는 중 오류를 감지했습니다.",
+            Caution = "주변 장치 검색 과정의 기록으로 대개 동작에 영향이 없습니다. 특정 블루투스·네트워크 장치 연결이 안 될 때만 같은 시각과 비교하세요.",
         },
     ];
 }

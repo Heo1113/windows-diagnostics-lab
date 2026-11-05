@@ -9,7 +9,7 @@
 |---|---|---|
 | 개발 컨테이너 (Linux x64) | .NET SDK 10.0.1xx로 전체 빌드(WPF 포함)와 테스트. Windows 전용 테스트 9개는 건너뜀 | Windows API 없음 |
 | GitHub Actions `windows-latest` | Windows Server 2025 (이미지 `windows-2025-vs2026`), AMD EPYC 7763, NVIDIA GPU 없음. 전체 테스트, 실제 이벤트 로그·WMI를 쓰는 CLI 스모크, 포터블 패키지 생성, 게시된 EXE의 GUI 스모크 | **Windows 11 클라이언트가 아님.** 러너 계정이 **관리자 권한**이라 일반 사용자 권한 동작은 여기서 확인되지 않음. 러너의 로그는 사용자 PC와 다름 |
-| 사용자 PC (RTX 5080, Ryzen 7 9800X3D, DDR5 64GB, X870E) | 사용하지 못함 | **실기 검증 없음** |
+| 사용자 PC (RTX 5080, Ryzen 7 9800X3D, DDR5 64GB, X870E) | 2026-11-05 사용자가 직접 실행: 대시보드 스크린샷과 이벤트 내보내기(JSON, 30일 381건)를 받아 확인 | 사용자가 보낸 화면·파일로만 확인. 아래 항목별 판정은 대부분 CI 근거이며, 이 PC에서 자동 테스트를 돌리지는 않음 |
 
 CI 근거: 브랜치 `claude/ecstatic-newton-cfosml`의 [Actions 실행 목록](https://github.com/Heo1113/windows-diagnostics-lab/actions?query=branch%3Aclaude%2Fecstatic-newton-cfosml).
 아래 수치는 실행 #5(커밋 `7970c43`)의 로그에서 옮겼습니다. 스크린샷·JSON 보고서는 `smoke-test-evidence` 아티팩트에 있습니다.
@@ -28,7 +28,7 @@ CI 근거: 브랜치 `claude/ecstatic-newton-cfosml`의 [Actions 실행 목록](
 | 3 | 수집 중 프로그램 재시작 | 통과 | 채널 위치와 이벤트가 한 트랜잭션으로 저장(`Channel_progress_and_events_commit_together`), 멈추지 않은 엔진의 다음 시작 복구(`Engine_that_was_not_stopped_is_recovered_on_the_next_start`), **Windows에서 게시된 GUI를 40초 수집 중 강제 종료 후 재시작**(CI `after-kill`) | — |
 | 4 | 권한 없는 로그 접근 | 부분 | 접근 거부 채널은 한 번만 '권한 부족'으로 기록하고 다른 로그는 계속 수집(`Access_denied_channel_is_reported_once_and_others_continue`, 가상 소스), 없는 로그·꺼진 로그 구분(`Missing_and_disabled_channels_are_marked_not_failed`, 실제 Windows `Missing_channel_is_reported_not_thrown`), 보안 로그 점검이 권한과 관계없이 상태를 돌려줌(`Security_log_probe_returns_a_status_whatever_the_rights`) | CI 러너가 관리자라 **실제 Windows에서 접근 거부가 일어나는 상황은 관찰하지 못함**. 일반 사용자 계정에서 Minidump 폴더가 '권한 부족'으로 표시되는지도 미확인 |
 | 5 | 센서 누락 | 통과 | NVIDIA 없는 실제 Windows에서 NVML 미검출 사유를 값 대신 표시(`Nvml_without_an_nvidia_driver_reports_a_reason_instead_of_values`, GUI 스모크 `gpuUnavailableReason: "nvml.dll을 찾을 수 없습니다 …"`), 없는 값은 NULL/N/A로 저장·표시(`Sensor_samples_keep_missing_values_as_null_and_downsample_on_request`, `Missing_gpu_is_recorded_as_unavailable_not_estimated`), 그 시각에 기록이 없으면 그렇다고 표시(`Shows_values_around_an_event_or_says_there_are_none`) | — |
-| 6 | GPU 드라이버 또는 센서 접근 오류 | 부분 | 실행 중 GPU 공급자가 예외를 내도 CPU·RAM 기록은 계속됨(`A_failing_gpu_provider_never_stops_system_sampling`, A의 가상 공급자), NVML 없음(항목 5) | **실제 NVIDIA 드라이버가 실행 중 재설정(TDR)될 때 NVML 동작은 미검증.** RTX 5080에서 NVML 값 읽기 자체도 이 프로젝트에서 확인하지 못함 |
+| 6 | GPU 드라이버 또는 센서 접근 오류 | 부분 | 실행 중 GPU 공급자가 예외를 내도 CPU·RAM 기록은 계속됨(`A_failing_gpu_provider_never_stops_system_sampling`, A의 가상 공급자), NVML 없음(항목 5) | **실제 NVIDIA 드라이버가 실행 중 재설정(TDR)될 때 NVML 동작은 미검증.** 사용자 PC 화면(2026-11-05)에 RTX 5080의 사용률·온도·전력·VRAM이 표시되어 NVML 읽기 자체는 동작함을 확인했으나, 값이 맞는지 `nvidia-smi`와 비교하지는 않음 |
 | 7 | 비정상 종료 후 기록 유지 | 통과 (프로세스 강제 종료) | **Windows CI: 게시된 GUI를 실제 로그로 40초 수집 후 강제 종료 → `wdl status --json`: 무결성 `ok`, 이벤트 145건·센서 8건 보존, 비정상 종료 1건(`app_unclean_end`) 기록.** 강제 종료 직후 DB 본 파일은 4KB였고 기록은 아직 WAL 파일에만 있었으나 모두 읽힘. Linux에서 `wdl demo`를 쓰기 도중 `kill -9`: 무결성 `ok`, 커밋된 이벤트 보존, 커밋 전 센서 일괄 기록은 전부 없음(부분 기록 없음). 테스트: `Unfinished_runs_are_recovered_with_their_last_sample_and_a_gap`, `Corrupt_file_is_moved_aside_never_deleted` | **OS 충돌(BSOD)·전원 차단 중 기록은 미검증**(요구사항에 따라 유발하지 않음). SQLite WAL + `synchronous=FULL` 설정은 커밋된 트랜잭션의 내구성을 위한 것이지만 실제 전원 차단으로 시험하지 않음 |
 | 8 | 과거 기록 검색 | 통과 | 기간·중요도·로그·공급자·분류·검색어·ID 필터와 묶음(`Query_filters_search_and_groups`, `Event_explorer_searches_groups_details_notes_and_exports`), 과거 가져오기(`History_import_extends_the_range_without_moving_the_live_position`), 실제 Windows 로그의 과거 7일·30일 읽기(CI), GUI 스모크 `event-search-and-detail` | 1년 이상 쌓인 큰 DB에서의 검색 속도는 미측정 |
 | 9 | 기준선 비교 | 부분 | 빈도·정확 검정·새로 나타난/사라진 문제·센서·구성 차이·같은 기간 다른 변경(`Compares_rates_groups_sensors_and_configuration_and_lists_other_changes`), 이전 기록이 없을 때 지어내지 않음(`A_baseline_with_no_data_before_says_so_instead_of_inventing_a_rate`), 정확 검정 값(`Exact_tests_match_known_values`), 화면·내보내기(`Compare_page_compares_baselines_and_snapshots`, GUI 스모크 `compare`) | **가상 시나리오 데이터로만 확인.** 실제 BIOS 업데이트·EXPO·전압·드라이버 변경 전후 데이터로는 미검증 |
@@ -52,7 +52,7 @@ CI 근거: 브랜치 `claude/ecstatic-newton-cfosml`의 [Actions 실행 목록](
 ## 이 작업에서 실제로 확인하지 못한 것 (요약)
 
 1. 사용자 PC(RTX 5080, Ryzen 7 9800X3D, DDR5 64GB, ASRock X870E Nova)에서의 실행.
-2. NVML로 RTX 5080의 실제 값 읽기, 드라이버 재설정 중의 NVML 동작.
+2. RTX 5080에서 NVML 값의 정확도(화면 표시는 확인, 다른 도구와 비교는 안 함), 드라이버 재설정 중의 NVML 동작.
 3. 실제 BSOD·WHEA·GPU TDR·디스크 오류 이벤트(유발하지 않았고, 러너에도 없음). 이 이벤트들의 분류는 직접 작성한 XML 자료로만 시험했습니다.
 4. Windows 11 클라이언트(CI는 Windows Server 2025)와 일반 사용자 권한 계정에서의 동작.
 5. 실제 BIOS·EXPO·메모리 전압·GPU 드라이버 변경 전후 비교.
@@ -60,6 +60,12 @@ CI 근거: 브랜치 `claude/ecstatic-newton-cfosml`의 [Actions 실행 목록](
 7. GUI의 시각적 품질(스크린샷을 이 환경에서 열어 보지 못함), 고해상도·다중 모니터, 알림 영역 풍선의 실제 표시.
 8. 며칠 이상 연속 실행, 수개월 데이터에서의 DB 크기와 속도.
 9. Strata·프로젝트 A와 같은 PC에서 함께 실행. (C는 둘의 파일·DB를 읽거나 쓰지 않도록 만들었고 코드에서 그 경로를 참조하지 않지만, 같은 PC에서 함께 실행해 보지는 않았습니다.)
+
+## 사용자 PC 첫 실행에서 드러난 점 (2026-11-05)
+
+- 30일 동안 시스템 충돌, WHEA, GPU 드라이버 오류, 디스크 오류 기록은 0건이었습니다. 따라서 이 항목들의 분류는 여전히 실제 이벤트로 확인되지 않았습니다.
+- 수집된 오류의 70%(381건 중 267건)가 '기타 오류·경고'였습니다. 원인은 Schannel, DCOM 10010·10005, VSS, Windows Search, Kernel-PnP 225 등에 규칙이 없었기 때문입니다.
+  이 이벤트들의 실제 필드 구조로 규칙을 추가했고(카탈로그 버전 2), 기존에 저장된 이벤트는 새 버전을 처음 실행할 때 다시 분류됩니다.
 
 ## 사용자 PC에서 안전하게 확인해 볼 수 있는 것
 

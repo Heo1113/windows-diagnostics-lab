@@ -128,7 +128,7 @@ public sealed partial class DashboardViewModel(ViewContext context) : PageViewMo
         int Count(Func<EventPoint, bool> predicate) => week.Count(predicate);
         var warnings = new List<NameValueRow>
         {
-            new("시스템 충돌·비정상 종료", $"{data.crashes.Count}건", data.crashes.Count > 0 ? "Diagnostics 화면에서 사건별 상세를 확인하세요." : null),
+            new("시스템 충돌·비정상 종료", $"{data.crashes.Count}건", data.crashes.Count > 0 ? "진단 화면에서 사건별 상세를 확인하세요." : null),
             new("WHEA 하드웨어 오류", $"{Count(p => p.Provider == EventCatalog.WheaLogger)}건", "수정된 오류도 포함 (반복 빈도가 중요)"),
             new("GPU 드라이버 오류·재설정", $"{Count(p => p.Category == EventCategories.GpuDriver && p.Severity >= DiagSeverity.Warning)}건", null),
             new("응용프로그램 비정상 종료", $"{Count(p => p.Category is EventCategories.AppCrash or EventCategories.AppHang)}건", null),
@@ -146,7 +146,7 @@ public sealed partial class DashboardViewModel(ViewContext context) : PageViewMo
         (OverallText, OverallLevel) = data.crashes.Count > 0 || critical > 0
             ? ($"최근 7일 동안 심각한 문제 기록이 있습니다: 비정상 종료 {data.crashes.Count}건, 심각 이벤트 {critical}건.", StatusLevel.Critical)
             : week.Any(p => p.Severity == DiagSeverity.Error)
-                ? ("최근 7일 동안 오류 기록이 있습니다. 반복 여부는 Diagnostics 화면에서 확인하세요.", StatusLevel.Warning)
+                ? ("최근 7일 동안 오류 기록이 있습니다. 반복 여부는 진단 화면에서 확인하세요.", StatusLevel.Warning)
                 : ("최근 7일 동안 심각하거나 오류 수준의 기록이 없습니다 (수집된 로그 기준).", StatusLevel.Good);
         StatusText = $"갱신 {Fmt.Clock(now)}";
     });

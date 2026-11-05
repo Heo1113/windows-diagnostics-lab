@@ -65,7 +65,7 @@ public sealed class EventSourceException(string message, Exception? inner = null
 
 /// <summary>
 /// Which events of one channel are collected: critical and error events of every provider; warnings of catalogued
-/// providers (or all warnings when enabled); informational events only for catalogue rules that ask for them.
+/// providers whose rules ask for them (or all warnings when enabled); informational events only for catalogue rules that ask for them.
 /// Excluded providers are never collected. The same filter is evaluated in memory (tests) and turned into an
 /// event log query (Windows), so both paths select the same events.
 /// </summary>
@@ -86,7 +86,7 @@ public sealed record EventFilter
         var rules = catalog.Rules
             .Where(r => r.Channels is null || r.Channels.Any(c => comparer.Equals(c, channel)))
             .ToList();
-        var warnings = new HashSet<string>(rules.Select(r => r.Provider), comparer);
+        var warnings = new HashSet<string>(rules.Where(r => r.CollectWarnings).Select(r => r.Provider), comparer);
         var informational = new Dictionary<string, IReadOnlyList<int>?>(comparer);
         foreach (var rule in rules.Where(r => r.CollectInformational))
         {

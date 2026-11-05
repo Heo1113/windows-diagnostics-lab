@@ -246,3 +246,87 @@ public class EventClassifierTests
         Assert.Equal("알 수 없는 코드", BugCheckCatalog.Name(0xDEAD));
     }
 }
+
+/// <summary>
+/// Rules added after the first run on a real PC (2026-11-05). The events below follow the field layout of events seen
+/// there; process IDs, package versions and the USB serial are made up.
+/// </summary>
+public class CommonWindowsErrorRuleTests
+{
+    private static readonly EventClassifier Classifier = EventClassifier.Default;
+
+    [Fact]
+    public void Schannel_tls_failure_names_the_process_and_is_only_a_warning()
+    {
+        var c = Classifier.Classify(Ev.Make("Schannel", 36874, level: 2,
+            message: "원격 클라이언트 응용 프로그램으로부터 TLS 1.0 연결 요청을 받았지만 …",
+            data: [("CallerProcessId", "7648"), ("CallerProcessImageName", "svchost[TermService]"), ("Protocol", "TLS 1.0")]));
+        Assert.True(c.IsCatalogued);
+        Assert.Equal(DiagSeverity.Warning, c.Severity);
+        Assert.Equal("process=svchost[termservice]; protocol=tls 1.0", c.Signature);
+        Assert.Contains(c.Facts, f => f.Note == "원격 데스크톱 서비스입니다.");
+        Assert.Contains("공격 여부", c.Caution);
+    }
+
+    [Fact]
+    public void Shadow_copy_errors_during_shutdown_are_informational()
+    {
+        var shutdown = Classifier.Classify(Ev.Make("VSS", 8193, channel: "Application",
+            message: "볼륨 섀도 복사본 서비스 오류: CoCreateInstance 루틴을 호출하는 동안 예기치 못한 오류가 발생했습니다. hr = 0x8007045b, 시스템을 종료하고 있습니다.",
+            data: [(null, "CoCreateInstance"), (null, "0x8007045b, 시스템을 종료하고 있습니다.\n"), (null, "")]));
+        Assert.Equal(DiagSeverity.Info, shutdown.Severity);
+        Assert.EndsWith("시스템 종료 중", shutdown.Title, StringComparison.Ordinal);
+        Assert.Contains("PC를 끌 때", shutdown.Meaning);
+
+        var other = Classifier.Classify(Ev.Make("VSS", 8193, channel: "Application", message: "… hr = 0x80042302 …",
+            data: [(null, "CoCreateInstance"), (null, "0x80042302")]));
+        Assert.Equal(DiagSeverity.Warning, other.Severity);
+        Assert.NotEqual(shutdown.GroupKey, other.GroupKey);
+    }
+
+    [Fact]
+    public void Windows_search_failure_reads_the_hresult_not_the_format_placeholder()
+    {
+        var c = Classifier.Classify(Ev.Make("Microsoft-Windows-Search", 7042, channel: "Application",
+            message: "인덱서 복구 단계 실패에 문제가 있어 Windows Search 서비스를 중지하는 중입니다.",
+            data: [("ExtraInfo", "\n\n컨텍스트:  응용 프로그램, SystemIndex 카탈로그\n\n자세히:\n\t0x%08x (0x80040d23 - Gatherer를 종료하는 중입니다.  (HRESULT : 0x80040d23))"), ("Reason", "복구 단계 실패")]));
+        Assert.Equal(EventCategories.ServiceFailure, c.Category);
+        Assert.Equal(DiagSeverity.Error, c.Severity);
+        Assert.Equal("id=7042; hr=0x80040d23", c.Signature);
+        Assert.Contains(c.Facts, f => f.Label == "사유" && f.Value == "복구 단계 실패");
+    }
+
+    [Fact]
+    public void Dcom_timeouts_of_one_app_group_together_across_versions()
+    {
+        var a = Classifier.Classify(Ev.Make("Microsoft-Windows-DistributedCOM", 10010, data: [("param1", "Microsoft.WindowsFeedbackHub_2.2608.303.0_x64__8wekyb3d8bbwe!App.AppX1.mca")]));
+        var b = Classifier.Classify(Ev.Make("Microsoft-Windows-DistributedCOM", 10010, data: [("param1", "Microsoft.WindowsFeedbackHub_2.2609.11.0_x64__8wekyb3d8bbwe!App.AppX1.mca")]));
+        Assert.Equal(a.GroupKey, b.GroupKey);
+        Assert.Equal(DiagSeverity.Warning, a.Severity);
+
+        var service = Classifier.Classify(Ev.Make("Microsoft-Windows-DistributedCOM", 10005,
+            data: [("param1", "87"), ("param2", "GamingServices"), ("param3", "사용할 수 없음"), ("param4", "{3E8C9ABE-9226-4609-BF5B-60288A391DEE}")]));
+        Assert.Equal("service=gamingservices; error=87", service.Signature);
+    }
+
+    [Fact]
+    public void Blocked_device_removal_names_the_program_and_device()
+    {
+        var c = Classifier.Classify(Ev.Make("Microsoft-Windows-Kernel-PnP", 225, level: 3,
+            data: [("ProcessId", "13080"), ("ProcessName", @"\Device\HarddiskVolume3\Windows\System32\SearchIndexer.exe"), ("DeviceInstance", @"USB\VID_1234&PID_5678\TESTSERIAL01")]));
+        Assert.Equal("프로그램이 장치 제거·꺼내기를 막음 (Kernel-PnP 225): SearchIndexer.exe → USB\\VID_1234&PID_5678\\TESTSERIAL01", c.Title);
+        Assert.Contains("고장이 아닙니다", c.Caution);
+    }
+
+    [Fact]
+    public void Noisy_providers_add_their_errors_but_not_their_warnings_to_collection()
+    {
+        var settings = new WinDiag.Core.Settings.AppSettings();
+        settings.Normalize();
+        var system = WinDiag.Collection.Sources.EventFilter.Build("System", EventCatalog.Default, settings.Collection);
+        Assert.True(system.Matches(Ev.Make("Schannel", 36874, level: 2)));
+        Assert.False(system.Matches(Ev.Make("Schannel", 36888, level: 3)));
+        Assert.True(system.Matches(Ev.Make("Microsoft-Windows-Kernel-PnP", 225, level: 3)));
+        Assert.True(system.Matches(Ev.Make("Microsoft-Windows-DistributedCOM", 10016, level: 3))); // the 10016 rule still collects DCOM warnings
+    }
+}

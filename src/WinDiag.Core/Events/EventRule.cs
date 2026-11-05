@@ -39,6 +39,12 @@ public sealed record EventRule
     /// <summary>Also collect informational (level 0/4) events matching this rule; otherwise only critical/error/warning.</summary>
     public bool CollectInformational { get; init; }
 
+    /// <summary>
+    /// A rule makes its provider's warning-level events collected too. False for rules that only explain error events of
+    /// providers whose warnings are mostly noise (TLS, shadow copies, search indexer...).
+    /// </summary>
+    public bool CollectWarnings { get; init; } = true;
+
     public required string Title { get; init; }
     public string? Meaning { get; init; }
     public string? Caution { get; init; }

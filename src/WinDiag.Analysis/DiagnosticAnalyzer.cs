@@ -78,7 +78,7 @@ public static class DiagnosticAnalyzer
 
         if (gaps.Count > 0)
         {
-            limitations.Add($"수집 누락·제한 구간 {gaps.Count}건이 있습니다 (Timeline 화면의 '수집 누락·제한' 항목 참조).");
+            limitations.Add($"수집 누락·제한 구간 {gaps.Count}건이 있습니다 (타임라인 화면의 '수집 누락·제한' 항목 참조).");
         }
 
         if (anomalies.Count > 0)
@@ -591,9 +591,9 @@ public static class DiagnosticAnalyzer
             list.Add(Hypothesis("hyp-gpu", "GPU·디스플레이 드라이버 쪽 문제 (드라이버 버전, GPU 설정, 전원·발열 포함)", evidence,
                 strong ? "강함" : gpu >= 3 || gpuCodes.Count > 0 ? "보통" : "약함",
                 [
-                    "문제가 없던 이전 GPU 드라이버 버전으로 되돌린 뒤 같은 작업에서 재현되는지 비교합니다 (Compare 화면에서 드라이버 변경 시점을 기준선으로 지정). 드라이버 설치·제거는 이 프로그램이 하지 않습니다.",
+                    "문제가 없던 이전 GPU 드라이버 버전으로 되돌린 뒤 같은 작업에서 재현되는지 비교합니다 (비교 화면에서 드라이버 변경 시점을 기준선으로 지정). 드라이버 설치·제거는 이 프로그램이 하지 않습니다.",
                     "GPU 오버클럭·언더볼트·전력 제한 변경을 기본값으로 되돌린 상태에서 비교합니다.",
-                    "Hardware 화면에서 오류 시각 전후의 GPU 온도·전력·클럭을 확인합니다.",
+                    "하드웨어 화면에서 오류 시각 전후의 GPU 온도·전력·클럭을 확인합니다.",
                     "그래픽카드 보조 전원 커넥터 체결 상태와 전원 케이블을 점검합니다.",
                     "다른 프로그램이나 벤치마크에서도 같은 오류가 나는지 확인해 특정 프로그램 문제와 구분합니다.",
                 ],
@@ -613,9 +613,9 @@ public static class DiagnosticAnalyzer
             list.Add(Hypothesis("hyp-cpu-memory", "CPU·메모리·패브릭 안정성 문제 (EXPO/XMP, PBO, 전압·클럭 설정 포함)", evidence,
                 (whea >= 3 && settingChange) || wheaCodes.Count > 0 ? "강함" : whea >= 3 ? "보통" : "약함",
                 [
-                    "EXPO/XMP, PBO, Curve Optimizer, 메모리·SoC 전압 등 바꾼 설정을 기본값으로 되돌린 기간과 WHEA 건수를 비교합니다 (사용자 기록 + Compare 화면).",
+                    "EXPO/XMP, PBO, Curve Optimizer, 메모리·SoC 전압 등 바꾼 설정을 기본값으로 되돌린 기간과 WHEA 건수를 비교합니다 (사용자 기록 + 비교 화면).",
                     "Windows 메모리 진단 또는 신뢰할 수 있는 메모리 검사 도구로 메모리를 검사합니다.",
-                    "BIOS/UEFI 버전을 확인하고, 변경할 경우 Timeline의 사용자 기록으로 남깁니다.",
+                    "BIOS/UEFI 버전을 확인하고, 변경할 경우 타임라인의 사용자 기록으로 남깁니다.",
                     "WHEA 이벤트 상세에서 MCA 뱅크·APIC ID가 매번 같은지 확인합니다 (특정 코어·뱅크 반복 여부).",
                 ],
                 "수정된(corrected) 하드웨어 오류는 시스템이 스스로 바로잡은 오류이며, 어느 부품의 문제인지는 이 기록만으로 확정할 수 없습니다.",
@@ -643,7 +643,7 @@ public static class DiagnosticAnalyzer
                 noBugcheck.Count >= 2 ? "보통" : "약함",
                 [
                     "그 시각에 정전, 멀티탭·차단기 문제, 전원 버튼 조작이 있었는지 확인합니다.",
-                    "직전 센서 기록이 있다면 높은 부하에서만 반복되는지 확인합니다 (Diagnostics의 충돌 상세).",
+                    "직전 센서 기록이 있다면 높은 부하에서만 반복되는지 확인합니다 (진단 화면의 충돌 상세).",
                     "PSU 케이블과 커넥터를 점검하고, 가능하면 다른 PSU로 교차 확인합니다.",
                     "BugCheck였다면 덤프가 남았어야 하므로 덤프 생성 설정과 volmgr 기록을 확인합니다.",
                 ],
@@ -673,7 +673,7 @@ public static class DiagnosticAnalyzer
                 app.Group.Count >= 5 ? "보통" : "약함",
                 [
                     "해당 프로그램(과 플러그인)을 최신 버전으로 업데이트하거나 다시 설치한 뒤 비교합니다.",
-                    "같은 시각에 다른 오류(GPU, WHEA)가 함께 기록되었는지 Timeline에서 확인합니다.",
+                    "같은 시각에 다른 오류(GPU, WHEA)가 함께 기록되었는지 타임라인에서 확인합니다.",
                     gpuModule ? "오류 모듈이 그래픽 드라이버 구성 요소이므로 GPU 드라이버 후보와 함께 검토합니다." : "오류 모듈의 버전과 제공자를 확인합니다.",
                 ],
                 "오류가 드러난 모듈이 원인 모듈이라는 뜻은 아닙니다.", DiagSeverity.Warning, (int)Math.Min(app.Group.Count, 1000)));

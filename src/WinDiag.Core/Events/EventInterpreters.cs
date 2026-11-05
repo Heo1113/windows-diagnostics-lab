@@ -412,6 +412,106 @@ public static partial class EventInterpreters
         return new Interpretation { TitleDetail = driver, Facts = facts, Signature = Sig(("driver", driver)) };
     }
 
+    /// <summary>Schannel 36874/36887/36888: a TLS handshake that failed; the process and protocol come from the event data.</summary>
+    public static Interpretation Schannel(IEventFields e)
+    {
+        var process = e.Get("CallerProcessImageName");
+        var protocol = e.Get("Protocol");
+        var facts = new List<EventFact>();
+        Add(facts, "연결을 처리한 프로세스", process,
+            process?.Contains("TermService", StringComparison.OrdinalIgnoreCase) == true ? "원격 데스크톱 서비스입니다." : null);
+        Add(facts, "프로토콜", protocol);
+        Add(facts, "경고 코드", e.Get("AlertDesc"));
+        return new Interpretation
+        {
+            TitleDetail = Join(" · ", process, protocol),
+            Facts = facts,
+            Signature = Sig(("process", process), ("protocol", protocol), ("alert", e.Get("AlertDesc"))),
+        };
+    }
+
+    /// <summary>DCOM 10010: a COM server did not register in time. The package version is left out of the grouping.</summary>
+    public static Interpretation Dcom10010(IEventFields e)
+    {
+        var server = e.Field("param1|0");
+        var facts = new List<EventFact>();
+        Add(facts, "서버", server);
+        var group = server is null ? null : PackageVersion().Replace(server, "_");
+        return new Interpretation { TitleDetail = Shorten(group, 70), Facts = facts, Signature = Sig(("server", group)) };
+    }
+
+    /// <summary>DCOM 10005: DCOM could not start a service to run a COM server.</summary>
+    public static Interpretation Dcom10005(IEventFields e)
+    {
+        var service = e.Field("param2|1");
+        var facts = new List<EventFact>();
+        Add(facts, "서비스", service);
+        Add(facts, "오류 코드", e.Field("param1|0"));
+        Add(facts, "COM 서버", e.Field("param4|3"));
+        return new Interpretation { TitleDetail = service, Facts = facts, Signature = Sig(("service", service), ("error", e.Field("param1|0"))) };
+    }
+
+    /// <summary>VSS 13/8193. hr 0x8007045b means "a system shutdown is in progress": recorded while Windows was shutting down.</summary>
+    public static Interpretation Vss(IEventFields e)
+    {
+        var hr = FirstHResult(e.Message) ?? e.Data.Select(d => FirstHResult(d.Value)).FirstOrDefault(v => v is not null);
+        var routine = e.EventId == 8193 ? e.GetAt(0) : e.GetAt(1);
+        var facts = new List<EventFact>();
+        Add(facts, e.EventId == 8193 ? "호출한 루틴" : "COM 서버", routine);
+        Add(facts, "결과 코드(hr)", hr);
+        var shutdown = string.Equals(hr, "0x8007045b", StringComparison.OrdinalIgnoreCase);
+        return new Interpretation
+        {
+            TitleDetail = shutdown ? "시스템 종료 중" : Join(" ", routine, hr),
+            Facts = facts,
+            Signature = Sig(("id", e.EventId.ToString(CultureInfo.InvariantCulture)), ("routine", routine), ("hr", hr)),
+            Severity = shutdown ? DiagSeverity.Info : null,
+            Meaning = shutdown
+                ? "Windows가 종료되는 중이라 볼륨 섀도 복사본 서비스가 필요한 구성 요소를 시작하지 못했다고 기록되었습니다(0x8007045b: 시스템을 종료하고 있음). PC를 끌 때 흔히 남는 기록입니다."
+                : null,
+        };
+    }
+
+    /// <summary>Windows Search indexer events: the HRESULT and reason come from the event text.</summary>
+    public static Interpretation WindowsSearch(IEventFields e)
+    {
+        var hr = FirstHResult(e.Get("ExtraInfo")) ?? FirstHResult(e.Message) ?? e.Data.Select(d => FirstHResult(d.Value)).FirstOrDefault(v => v is not null);
+        var reason = e.Get("Reason");
+        var facts = new List<EventFact>();
+        Add(facts, "사유", reason);
+        Add(facts, "결과 코드(HRESULT)", hr, string.Equals(hr, "0x80040d23", StringComparison.OrdinalIgnoreCase) ? "색인 수집기(Gatherer)가 종료되는 중이었습니다." : null);
+        return new Interpretation
+        {
+            TitleDetail = Join(" · ", reason, hr),
+            Facts = facts,
+            Signature = Sig(("id", e.EventId.ToString(CultureInfo.InvariantCulture)), ("hr", hr)),
+        };
+    }
+
+    /// <summary>Kernel-PnP 225: a program kept a device from being removed or ejected (it had files open on it).</summary>
+    public static Interpretation KernelPnp225(IEventFields e)
+    {
+        var path = e.Get("ProcessName");
+        var process = path is null ? null : path[(path.LastIndexOf('\\') + 1)..];
+        var device = e.Get("DeviceInstance");
+        var facts = new List<EventFact>();
+        Add(facts, "막은 프로그램", process);
+        Add(facts, "프로그램 경로", path);
+        Add(facts, "장치 인스턴스", device);
+        return new Interpretation { TitleDetail = Join(" → ", process, device), Facts = facts, Signature = Sig(("process", process), ("device", device)) };
+    }
+
+    private static string? FirstHResult(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        var match = HResult().Match(text);
+        return match.Success ? "0x" + match.Groups[1].Value.ToLowerInvariant() : null;
+    }
+
     public static Interpretation MessageFirstLine(IEventFields e)
     {
         var line = FirstLine(e.Message);
@@ -626,6 +726,14 @@ public static partial class EventInterpreters
 
     [GeneratedRegex(@"0x([0-9a-fA-F]{1,16})\s*(?:\(([^)]*)\))?", RegexOptions.CultureInvariant)]
     private static partial Regex BugCheckText();
+
+    /// <summary>An 8-digit HRESULT such as 0x8007045b (not the "0x%08x" format placeholder some events contain).</summary>
+    [GeneratedRegex(@"0x([0-9a-fA-F]{8})\b", RegexOptions.CultureInvariant)]
+    private static partial Regex HResult();
+
+    /// <summary>The version part of a package full name ("_2.2608.303.0_").</summary>
+    [GeneratedRegex(@"_\d+(?:\.\d+){1,3}_", RegexOptions.CultureInvariant)]
+    private static partial Regex PackageVersion();
 
     [GeneratedRegex(@"KB\d{6,8}", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex KbNumber();

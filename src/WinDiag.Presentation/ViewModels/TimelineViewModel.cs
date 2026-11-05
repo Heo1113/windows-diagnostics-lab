@@ -161,7 +161,7 @@ public sealed partial class TimelineViewModel : PageViewModel
         }
 
         await Task.Run(() => Context.Store.AddBaseline(new Baseline { Name = name, Time = item.TimeValue, UserRecordId = item.UserRecordId, Description = item.Title }));
-        StatusText = $"기준선 '{name}'을(를) 만들었습니다. Compare 화면에서 전후를 비교할 수 있습니다.";
+        StatusText = $"기준선 '{name}'을(를) 만들었습니다. 비교 화면에서 전후를 비교할 수 있습니다.";
     }
 
     [RelayCommand]

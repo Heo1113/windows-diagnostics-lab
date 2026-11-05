@@ -107,6 +107,65 @@ public sealed partial class DiagnosticsStore
         }
     }
 
+    /// <summary>Up to <paramref name="limit"/> events with an ID above <paramref name="afterId"/>, in ID order (for paging through all events).</summary>
+    public IReadOnlyList<StoredEvent> ReadEventPage(long afterId, int limit)
+    {
+        using var reader = OpenReader();
+        using var command = reader.CreateCommand();
+        command.CommandText = $"SELECT {EventColumns} FROM events e WHERE e.id > @after ORDER BY e.id LIMIT @limit;";
+        command.Parameters.AddWithValue("@after", afterId);
+        command.Parameters.AddWithValue("@limit", limit);
+        using var r = command.ExecuteReader();
+        var list = new List<StoredEvent>();
+        while (r.Read())
+        {
+            list.Add(ReadEvent(r));
+        }
+
+        return list;
+    }
+
+    /// <summary>Replaces the stored classification of events (after the classification rules changed), in one transaction.</summary>
+    public void UpdateClassifications(IReadOnlyList<(long Id, EventClassification Classification)> changes)
+    {
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        lock (_writeGate)
+        {
+            ThrowIfDisposed();
+            using var tx = _writer.BeginTransaction();
+            using var command = _writer.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = """
+                UPDATE events SET category = @category, severity = @severity, group_key = @group_key, signature = @signature, title = @title
+                WHERE id = @id;
+                """;
+            var names = new[] { "@category", "@severity", "@group_key", "@signature", "@title", "@id" };
+            var p = names.ToDictionary(n => n, n =>
+            {
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = n;
+                command.Parameters.Add(parameter);
+                return parameter;
+            });
+            foreach (var (id, c) in changes)
+            {
+                p["@category"].Value = c.Category;
+                p["@severity"].Value = (int)c.Severity;
+                p["@group_key"].Value = c.GroupKey;
+                p["@signature"].Value = c.Signature;
+                p["@title"].Value = c.Title;
+                p["@id"].Value = id;
+                command.ExecuteNonQuery();
+            }
+
+            tx.Commit();
+        }
+    }
+
     public StoredEvent? GetEvent(long id)
     {
         using var reader = OpenReader();

@@ -123,6 +123,11 @@ public sealed class DiagnosticsEngine : IAsyncDisposable
         try
         {
             var recovered = store.RecoverUnfinishedRuns();
+            if (EventReclassifier.RunIfOutdated(store, EventClassifier.Default, options.Masker ?? PrivacyMasker.ForCurrentMachine()) is { } reclassified)
+            {
+                log.Info("engine", $"분류 규칙 버전 {EventCatalog.Version}: 저장된 이벤트 {reclassified.Checked}건 중 {reclassified.Changed}건을 새 규칙으로 다시 분류");
+            }
+
             var settings = options.Settings;
             var hardware = HardwareMonitor.Create(
                 new SamplingSettings { GpuEnabled = settings.Sensors.GpuEnabled, SystemEnabled = settings.Sensors.SystemEnabled },
